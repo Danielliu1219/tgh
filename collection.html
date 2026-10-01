@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>收藏夹 · 拼贴 · AI“涂鸦画廊”</title>
+<meta name="description" content="我的收藏夹与拼贴画布：把喜欢的作品拖进画布，缩放、摆放、拼出自己的灵感板。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='4' fill='%23171327'/%3E%3Ccircle cx='32' cy='33' r='15' fill='%23E82E4F'/%3E%3Ccircle cx='17' cy='16' r='3.5' fill='%239A7FBC'/%3E%3Ccircle cx='48' cy='13' r='2.5' fill='%23F3D1CA'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/common.css">
+<style>
+.page-head { padding: 118px 0 26px; max-width: 720px; }
+.page-head h1 { font-size: clamp(36px, 5.6vw, 58px); color: var(--cream); line-height: 1.2; }
+.page-head h1 .amber { color: var(--amber); }
+.page-head p { color: var(--cream-dim); margin-top: 12px; font-size: 14.5px; }
+
+/* ---------- 收藏网格 ---------- */
+.fav-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-bottom: 90px; }
+@media (max-width: 900px) { .fav-grid { grid-template-columns: repeat(2, 1fr); } }
+.fav-card {
+  background: var(--ink-2); border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden;
+  display: flex; flex-direction: column;
+  transition: border-color .25s, transform .25s;
+}
+.fav-card:hover { border-color: rgba(232, 46, 79, .5); transform: translateY(-4px); }
+.fav-card .pic { aspect-ratio: 4/4.6; overflow: hidden; }
+.fav-card .pic img { width: 100%; height: 100%; object-fit: cover; transition: transform .5s cubic-bezier(.16,1,.3,1); }
+.fav-card:hover .pic img { transform: scale(1.06); }
+.fav-card .info { padding: 13px 16px 4px; }
+.fav-card .info .t { font-family: var(--font-display); font-weight: 800; font-size: 18px; color: var(--cream); }
+.fav-card .info .meta { font-size: 12.5px; color: var(--cream-dim); margin-top: 4px; }
+.fav-card .ops { display: flex; gap: 8px; padding: 12px 14px 14px; }
+
+/* ---------- 拼贴画布 ---------- */
+.collage-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+.collage-head h2 { font-size: 22px; color: var(--cream); margin-right: auto; }
+.collage-head h2 .amber { color: var(--amber); }
+.collage-box {
+  position: relative; height: min(58vh, 560px);
+  background:
+    radial-gradient(520px 300px at 78% 8%, rgba(110, 90, 162, .22), transparent 70%),
+    var(--ink-1);
+  border: 1px solid var(--line); border-radius: var(--r-panel);
+  overflow: hidden;
+}
+.collage-box::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background-image: radial-gradient(rgba(154, 127, 188, .12) 1px, transparent 1px);
+  background-size: 26px 26px;
+}
+.col-item {
+  position: absolute; width: 24%; cursor: grab; touch-action: none;
+  border-radius: 4px; overflow: hidden;
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 14px 34px -14px rgba(8, 6, 18, .5);
+}
+.col-item:active { cursor: grabbing; }
+.col-item img { width: 100%; aspect-ratio: var(--r); object-fit: cover; transform: scale(var(--s, 1)); display: block; }
+.col-item .del {
+  position: absolute; top: 6px; right: 6px; z-index: 2;
+  width: 24px; height: 24px; border-radius: 4px;
+  background: rgba(33, 25, 79, .85); border: 1px solid var(--line-strong);
+  color: var(--cream); font-size: 12px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.col-item .del:hover { border-color: var(--heart); color: var(--heart); }
+
+.palette {
+  display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px; margin-top: 10px;
+}
+.pal-k {
+  font-family: var(--font-en); font-size: 11px; letter-spacing: .22em;
+  color: var(--cream-dim); margin-top: 20px; display: flex; align-items: center; gap: 10px;
+}
+.pal-k::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.p-item {
+  position: relative; flex: none; width: 84px; cursor: pointer;
+  border-radius: 4px; overflow: hidden; border: 2px solid transparent;
+  transition: border-color .2s, transform .2s;
+}
+.p-item:hover { border-color: var(--amber); transform: translateY(-3px); }
+.p-item img { width: 100%; aspect-ratio: 3/4; object-fit: cover; display: block; }
+.p-item .plus {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(23, 19, 39, .55); color: var(--amber); font-size: 26px; opacity: 0;
+  transition: opacity .2s;
+}
+.p-item:hover .plus { opacity: 1; }
+.palette-hint { font-size: 13px; color: var(--cream-dim); padding: 8px 2px; }
+</style>
+</head>
+<body>
+
+<a class="skip" href="#main">跳到正文</a>
+
+<header id="site-nav" data-active="collection"></header>
+
+<main class="wrap" id="main">
+  <div class="page-head">
+    <h1>收藏夹 <span class="amber">· 拼贴</span></h1>
+    <p>收藏喜欢的作品，连同内置素材一起拖进拼贴画布：摆放、缩放，拼出你的灵感板。布局自动保存在本机。</p>
+  </div>
+
+  <div class="fav-grid" id="favGrid"></div>
+
+  <section id="collage">
+    <div class="collage-head">
+      <h2>拼贴画布 <span class="amber">Collage</span></h2>
+      <button class="btn small" onclick="saveLayout()">保存布局</button>
+      <button class="btn-ghost small" onclick="clearLayout()">清空画布</button>
+    </div>
+    <div class="collage-box" id="collageCanvas"></div>
+    <div class="pal-k">素材 · Materials</div>
+    <div class="palette" id="paletteMats"></div>
+    <div class="pal-k">我的收藏 · Favorites</div>
+    <div class="palette" id="palette"></div>
+  </section>
+</main>
+
+<footer id="site-footer"></footer>
+
+<script src="js/data.js"></script>
+<script src="js/common.js"></script>
+<script src="js/collection.js"></script>
+</body>
+</html>

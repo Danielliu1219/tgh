@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>发布作品 · AI“涂鸦画廊”</title>
+<meta name="description" content="上传你的画作到涂鸦墙。作品默认开放共享与二创：原作品完整保留、署名清晰。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='4' fill='%23171327'/%3E%3Ccircle cx='32' cy='33' r='15' fill='%23E82E4F'/%3E%3Ccircle cx='17' cy='16' r='3.5' fill='%239A7FBC'/%3E%3Ccircle cx='48' cy='13' r='2.5' fill='%23F3D1CA'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/common.css">
+<style>
+/* 左右双栏：左边发布表单，右边「最近挂上墙的」——页更短，一眼看到底 */
+.upload-wrap {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(28px, 4.5vw, 56px); align-items: start;
+  padding-bottom: 40px;
+}
+@media (max-width: 900px) { .upload-wrap { grid-template-columns: 1fr; } }
+
+.upload-head { padding: 118px 0 30px; max-width: 720px; }
+.upload-head h1 {
+  font-size: clamp(36px, 5.6vw, 58px); color: var(--cream); line-height: 1.2;
+  text-shadow: 3px 3px 0 rgba(67, 53, 114, .85), 7px 7px 0 rgba(154, 127, 188, .38);
+}
+.upload-head h1 .amber { color: var(--amber); }
+.upload-head p { color: var(--cream-dim); margin-top: 12px; font-size: 14.5px; }
+
+/* 卡片不再平铺纯色：渐变底 + 半调网点 + 角落光晕 + 硬阴影（海报印刷感） */
+.upload-card {
+  position: relative; overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgba(110, 90, 162, .16), transparent 55%),
+    radial-gradient(90% 80% at 0% 100%, rgba(232, 46, 79, .08), transparent 55%),
+    linear-gradient(165deg, #221B47, #191438);
+  border: 1px solid var(--line); border-radius: var(--r-panel);
+  box-shadow: 8px 8px 0 rgba(67, 53, 114, .5);
+  padding: 24px 30px 28px; max-width: 720px; margin-bottom: 30px;
+}
+.upload-card::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background-image: radial-gradient(rgba(154, 127, 188, .13) 1px, transparent 1.4px);
+  background-size: 22px 22px;
+}
+.upload-card > * { position: relative; }
+.upload-step {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--font-display); font-weight: 800; font-size: 16px;
+  color: var(--cream); letter-spacing: .04em; margin-bottom: 18px;
+}
+.upload-step .us-no {
+  font-family: var(--font-en); font-size: 12px; font-weight: 700;
+  color: #171327; background: var(--amber);
+  padding: 3px 7px 2px; border-radius: 4px; letter-spacing: .12em;
+  box-shadow: 2px 2px 0 rgba(243, 209, 202, .35);
+}
+
+.dropzone {
+  position: relative;
+  border: 2px dashed var(--line-strong); border-radius: var(--r-card);
+  padding: 46px 20px; text-align: center; cursor: pointer;
+  transition: border-color .25s, background .25s, transform .15s;
+}
+/* 选图区漂浮的涂鸦小图标，打破大面积留白 */
+.dz-deco { position: absolute; inset: 0; pointer-events: none; }
+.dz-deco .ico {
+  position: absolute; width: 34px; height: 34px; opacity: .16;
+  animation: dzFloat 5.5s ease-in-out infinite alternate;
+}
+.dz-deco .d1 { left: 18px; top: 14px; color: var(--amber); }
+.dz-deco .d2 { right: 22px; top: 24px; width: 27px; height: 27px; color: #9A7FBC; animation-delay: -2s; animation-duration: 6.5s; }
+.dz-deco .d3 { right: 36px; bottom: 12px; width: 30px; height: 30px; color: var(--cream); animation-delay: -4s; animation-duration: 7s; }
+@keyframes dzFloat {
+  from { transform: translateY(-4px) rotate(-5deg); }
+  to { transform: translateY(5px) rotate(5deg); }
+}
+@media (prefers-reduced-motion: reduce) { .dz-deco .ico { animation: none; } }
+.dropzone:hover { border-color: var(--amber); background: rgba(232, 46, 79, .06); }
+.dropzone:active { transform: scale(.99); }
+.dropzone.over { border-color: var(--amber); background: rgba(232, 46, 79, .14); }
+.dropzone .ico-big { width: 44px; height: 44px; margin: 0 auto 14px; color: var(--amber); }
+.dropzone .dz-t { font-family: var(--font-display); font-weight: 800; font-size: 19px; color: var(--cream); }
+.dropzone .dz-s { font-size: 13px; color: var(--cream-dim); margin-top: 6px; }
+
+.preview-box { display: none; position: relative; border-radius: var(--r-card); overflow: hidden; border: 1px solid var(--line-strong); }
+.preview-box img { width: 100%; max-height: 460px; object-fit: contain; background: var(--ink-1); }
+.preview-box .reset {
+  position: absolute; top: 12px; right: 12px;
+  background: rgba(33, 25, 79, .85); border: 1px solid var(--line-strong); border-radius: 4px;
+  color: var(--cream); padding: 8px 16px; font-size: 13px;
+}
+.preview-box .reset:hover { border-color: var(--amber); color: var(--amber); }
+
+.agree-row { display: flex; align-items: flex-start; gap: 10px; margin: 18px 0 20px; }
+.agree-row input { margin-top: 3px; accent-color: var(--amber); }
+.agree-row label { font-size: 13px; color: var(--cream-dim); line-height: 1.7; }
+
+/* 最近挂上墙的（右栏），激励发布 */
+.recent-head { padding-top: 118px; }   /* 让开吸顶导航，与左栏标题齐平 */
+@media (max-width: 900px) { .recent-head { padding-top: 40px; } }
+.recent-head h2 { font-size: clamp(24px, 3vw, 34px); color: var(--cream); }
+.recent-head p { color: var(--cream-dim); margin-top: 10px; font-size: 14px; }
+.recent { columns: 2 190px; column-gap: 18px; margin-top: 22px; }
+.recent .l-card {
+  display: block; break-inside: avoid; margin-bottom: 22px;
+  position: relative; overflow: hidden;
+  background: var(--ink-2); border: 1px solid var(--line); border-radius: var(--r-card);
+  transition: border-color .25s, transform .25s, box-shadow .25s;
+}
+.recent .l-card:hover { border-color: rgba(232, 46, 79, .45); box-shadow: var(--shadow-soft), var(--glow-amber); }
+.recent .l-card img { width: 100%; height: auto; }
+.recent .l-card .info { padding: 12px 16px 14px; }
+.recent .l-card .info .t { font-family: var(--font-display); font-weight: 800; font-size: 17px; color: var(--cream); }
+.recent .l-card .info .m { display: flex; gap: 10px; align-items: center; margin-top: 5px; font-size: 12.5px; color: var(--cream-dim); }
+.recent .l-card .info .m .lk { margin-left: auto; color: var(--amber-hot); }
+</style>
+</head>
+<body>
+
+<a class="skip" href="#main">跳到正文</a>
+
+<header id="site-nav" data-active="upload"></header>
+
+<main class="wrap" id="main">
+  <div class="upload-wrap">
+    <div class="upload-main">
+      <div class="upload-head">
+        <h1>把你的画 <span class="amber">挂上墙</span></h1>
+        <p>作品默认开放共享与二创：原作品完整保留、署名清晰，别人只能在你的作品上新建图层。</p>
+      </div>
+
+      <div class="upload-card">
+        <div class="upload-step"><span class="us-no">01</span>作品标题</div>
+        <div class="field">
+          <label for="fTitle">标题</label>
+          <input id="fTitle" placeholder="给作品起个名字">
+        </div>
+      </div>
+
+      <div class="upload-card">
+        <div class="upload-step"><span class="us-no">02</span>选一张图</div>
+        <div class="dropzone" id="dropzone">
+          <div class="dz-deco" aria-hidden="true">
+            <span class="ico d1" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0yMDAuNzcsNTMuODlBMTAzLjI3LDEwMy4yNywwLDAsMCwxMjgsMjRoLTEuMDdBMTA0LDEwNCwwLDAsMCwyNCwxMjhjMCw0MywyNi41OCw3OS4wNiw2OS4zNiw5NC4xN0EzMiwzMiwwLDAsMCwxMzYsMTkyYTE2LDE2LDAsMCwxLDE2LTE2aDQ2LjIxYTMxLjgxLDMxLjgxLDAsMCwwLDMxLjItMjQuODgsMTA0LjQzLDEwNC40MywwLDAsMCwyLjU5LTI0QTEwMy4yOCwxMDMuMjgsMCwwLDAsMjAwLjc3LDUzLjg5Wm0xMyw5My43MUExNS44OSwxNS44OSwwLDAsMSwxOTguMjEsMTYwSDE1MmEzMiwzMiwwLDAsMC0zMiwzMiwxNiwxNiwwLDAsMS0yMS4zMSwxNS4wN0M2Mi40OSwxOTQuMyw0MCwxNjQsNDAsMTI4YTg4LDg4LDAsMCwxLDg3LjA5LTg4aC45YTg4LjM1LDg4LjM1LDAsMCwxLDg4LDg3LjI1QTg4Ljg2LDg4Ljg2LDAsMCwxLDIxMy44MSwxNDcuNlpNMTQwLDc2YTEyLDEyLDAsMSwxLTEyLTEyQTEyLDEyLDAsMCwxLDE0MCw3NlpNOTYsMTAwQTEyLDEyLDAsMSwxLDg0LDg4LDEyLDEyLDAsMCwxLDk2LDEwMFptMCw1NmExMiwxMiwwLDEsMS0xMi0xMkExMiwxMiwwLDAsMSw5NiwxNTZabTg4LTU2YTEyLDEyLDAsMSwxLTEyLTEyQTEyLDEyLDAsMCwxLDE4NCwxMDBaIi8+PC9zdmc+')"></span>
+            <span class="ico d2" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0yMzIsMzJhOCw4LDAsMCwwLTgtOGMtNDQuMDgsMC04OS4zMSw0OS43MS0xMTQuNDMsODIuNjNBNjAsNjAsMCwwLDAsMzIsMTY0YzAsMzAuODgtMTkuNTQsNDQuNzMtMjAuNDcsNDUuMzdBOCw4LDAsMCwwLDE2LDIyNEg5MmE2MCw2MCwwLDAsMCw1Ny4zNy03Ny41N0MxODIuMywxMjEuMzEsMjMyLDc2LjA4LDIzMiwzMlpNOTIsMjA4SDM0LjYzQzQxLjM4LDE5OC40MSw0OCwxODMuOTIsNDgsMTY0YTQ0LDQ0LDAsMSwxLDQ0LDQ0Wm0zMi40Mi05NC40NXE1LjE0LTYuNjYsMTAuMDktMTIuNTVBNzYuMjMsNzYuMjMsMCwwLDEsMTU1LDEyMS40OXEtNS45LDQuOTQtMTIuNTUsMTAuMDlBNjAuNTQsNjAuNTQsMCwwLDAsMTI0LjQyLDExMy41NVptNDIuNy0yLjY4YTkyLjU3LDkyLjU3LDAsMCwwLTIyLTIyYzMxLjc4LTM0LjUzLDU1Ljc1LTQ1LDY5LjktNDcuOTFDMjEyLjE3LDU1LjEyLDIwMS42NSw3OS4wOSwxNjcuMTIsMTEwLjg3WiIvPjwvc3ZnPg==')"></span>
+            <span class="ico d3" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0yMTYsNDBINzJBMTYsMTYsMCwwLDAsNTYsNTZWNzJINDBBMTYsMTYsMCwwLDAsMjQsODhWMjAwYTE2LDE2LDAsMCwwLDE2LDE2SDE4NGExNiwxNiwwLDAsMCwxNi0xNlYxODRoMTZhMTYsMTYsMCwwLDAsMTYtMTZWNTZBMTYsMTYsMCwwLDAsMjE2LDQwWk03Miw1NkgyMTZ2NjIuNzVsLTEwLjA3LTEwLjA2YTE2LDE2LDAsMCwwLTIyLjYzLDBsLTIwLDIwLTQ0LTQ0YTE2LDE2LDAsMCwwLTIyLjYyLDBMNzIsMTA5LjM3Wk0xODQsMjAwSDQwVjg4SDU2djgwYTE2LDE2LDAsMCwwLDE2LDE2SDE4NFptMzItMzJINzJWMTMybDM2LTM2LDQ5LjY2LDQ5LjY2YTgsOCwwLDAsMCwxMS4zMSwwTDE5NC42MywxMjAsMjE2LDE0MS4zOFYxNjhaTTE2MCw4NGExMiwxMiwwLDEsMSwxMiwxMkExMiwxMiwwLDAsMSwxNjAsODRaIi8+PC9zdmc+')"></span>
+          </div>
+          <div class="ico-big ico" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0yMjQsMTQ0djY0YTgsOCwwLDAsMS04LDhINDBhOCw4LDAsMCwxLTgtOFYxNDRhOCw4LDAsMCwxLDE2LDB2NTZIMjA4VjE0NGE4LDgsMCwwLDEsMTYsMFpNOTMuNjYsNzcuNjYsMTIwLDUxLjMxVjE0NGE4LDgsMCwwLDAsMTYsMFY1MS4zMWwyNi4zNCwyNi4zNWE4LDgsMCwwLDAsMTEuMzItMTEuMzJsLTQwLTQwYTgsOCwwLDAsMC0xMS4zMiwwbC00MCw0MEE4LDgsMCwwLDAsOTMuNjYsNzcuNjZaIi8+PC9zdmc+')"></div>
+          <div class="dz-t">点这里选图，或把图片拖进来</div>
+          <div class="dz-s">支持 JPG / PNG · 大图会自动压小</div>
+        </div>
+        <input type="file" id="fileInput" accept="image/*" hidden>
+        <div id="previewBox" class="preview-box">
+          <img id="previewImg" alt="预览">
+          <button class="reset" onclick="resetFile()">✕ 换一张</button>
+        </div>
+      </div>
+
+      <div class="upload-card">
+        <div class="upload-step"><span class="us-no">03</span>分类与发布</div>
+        <div class="field">
+          <label for="fCat">分类</label>
+          <select id="fCat"></select>
+        </div>
+        <div class="field" id="fCatCustom" style="display:none">
+          <label for="fCatCustomInput">分类名</label>
+          <input id="fCatCustomInput" placeholder="比如：像素画" maxlength="10">
+        </div>
+        <div class="field">
+          <label for="fTags">标签（用逗号分隔）</label>
+          <input id="fTags" placeholder="比如：手绘, 暖色调">
+        </div>
+        <div class="agree-row">
+          <input type="checkbox" id="fAgree">
+          <label for="fAgree">我同意本作品开放共享与二创：任何人在作品上新建图层不会改动我的原图，且始终保留我的署名。</label>
+        </div>
+        <button class="btn" id="publishBtn" style="width:100%" onclick="publish()">发布到画廊</button>
+      </div>
+    </div>
+
+    <aside class="upload-side">
+      <div class="recent-head">
+        <div class="eyebrow">Recently on the wall</div>
+        <h2>最近挂上墙的</h2>
+        <p>刚发布的几幅。挂上你的画，也会出现在这里。</p>
+      </div>
+      <div class="recent" id="recentGrid"></div>
+    </aside>
+  </div>
+</main>
+
+<footer id="site-footer"></footer>
+
+<script src="js/data.js"></script>
+<script src="js/common.js"></script>
+<script src="js/upload.js"></script>
+</body>
+</html>

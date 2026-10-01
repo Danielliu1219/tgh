@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI“涂鸦画廊” Mur de graffiti</title>
+<meta name="description" content="AI“涂鸦画廊”：在他人作品上新建图层涂鸦、二次创作的社区画廊。作品按作品集陈列，首页是同人志封面式的整屏海报，翻开任意一集就是一整本书，每一页都欢迎你再添一笔。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='4' fill='%23171327'/%3E%3Ccircle cx='32' cy='33' r='15' fill='%23E82E4F'/%3E%3Ccircle cx='17' cy='16' r='3.5' fill='%239A7FBC'/%3E%3Ccircle cx='48' cy='13' r='2.5' fill='%23F3D1CA'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/common.css">
+<style>
+/* ================= 登录门（第一屏）：参考画作印在双开门上的海报 ================= */
+.gate { position: fixed; inset: 0; z-index: 100; overflow: hidden; perspective: 1500px; --gate-shift: clamp(44px, 9vw, 150px); }
+/* 深底：不透明底层单独一层（开门时淡出，让后面的首页透出来） */
+.gate-back {
+  position: absolute; inset: 0; z-index: 0;
+  background:
+    radial-gradient(560px 420px at 16% 8%, rgba(110, 90, 162, .22), transparent 62%),
+    radial-gradient(900px 700px at 88% 104%, rgba(168, 80, 126, .16), transparent 58%),
+    radial-gradient(rgba(154, 127, 188, .12) 1px, transparent 1.4px) 0 0 / 24px 24px,
+    linear-gradient(180deg, #171327, #141021);
+}
+/* 底层装饰：印刷大字（反差字体撑起纯色底）+ 两层同画的错版回声（慢速浮动，制造纵深） */
+.gate-bg { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.gate-outline {
+  position: absolute; right: 3vw; top: 5vh;
+  font-family: var(--font-en); font-size: clamp(58px, 8.5vw, 150px);
+  letter-spacing: .05em; line-height: .95; text-align: right; white-space: nowrap;
+  color: transparent; -webkit-text-stroke: 1.5px rgba(154, 127, 188, .26);
+}
+.gate-echo {
+  position: absolute; left: calc(50% + var(--gate-shift)); top: 50%;
+  width: 65vh; height: 92vh;
+  background: url('assets/gate-bg.jpg') center / cover no-repeat;
+  opacity: .22;
+  animation: echoBob 9s ease-in-out infinite alternate;
+}
+.gate-echo.e1 {
+  margin: calc(-46vh - 14px) 0 0 calc(-32.5vh - 36px);
+  filter: sepia(1) hue-rotate(215deg) saturate(1.1) brightness(.9);
+}
+.gate-echo.e2 {
+  margin: calc(-46vh + 4px) 0 0 calc(-32.5vh + 46px);
+  filter: saturate(1.35) contrast(1.1); opacity: .16;
+  animation-delay: -4.5s;
+}
+@keyframes echoBob {
+  from { transform: translateY(-9px) rotate(-1.2deg); }
+  to { transform: translateY(9px) rotate(1.2deg); }
+}
+/* 双开门：海报印在门上，中缝对开（门体透明，只有画；鼠标 3D 倾斜作用在这层） */
+.gate-doors { position: absolute; inset: 0; z-index: 3; pointer-events: none; transform-style: preserve-3d; }
+.door { position: absolute; top: 0; bottom: 0; width: 50%; transform-style: preserve-3d; }
+.door.left { left: 0; transform-origin: left center; }
+.door.right { right: 0; transform-origin: right center; }
+.poster-piece {
+  position: absolute; top: 50%; margin-top: -46vh;
+  width: 32.5vh; height: 92vh;
+  background: url('assets/gate-bg.jpg') no-repeat; background-size: 65vh auto;
+  box-shadow: 0 0 0 1px rgba(23, 19, 39, .38), 0 24px 60px rgba(8, 6, 18, .5);
+}
+.door.left .poster-piece { right: calc(-1 * var(--gate-shift)); background-position: left center; }
+.door.right .poster-piece { left: var(--gate-shift); background-position: right center; }
+/* 画框纸边 + 中缝折痕 */
+.poster-piece::after {
+  content: ""; position: absolute; inset: 9px;
+  border: 2px solid #F3D1CA; pointer-events: none;
+}
+.door.left .poster-piece::before, .door.right .poster-piece::before {
+  content: ""; position: absolute; top: 9px; bottom: 9px; width: 7px;
+  background: linear-gradient(90deg, transparent, rgba(23, 19, 39, .35), transparent);
+}
+.door.left .poster-piece::before { right: -4px; }
+.door.right .poster-piece::before { left: -4px; }
+/* 内容层：标题左上 + 卡片左下，登录不居中，画占右边 */
+.gate-content {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start;
+  padding: clamp(24px, 4.5vw, 60px);
+  pointer-events: none;
+}
+.gate-content > * { pointer-events: auto; }
+.gate-top { max-width: 42vw; }
+.gate-en {
+  font-family: var(--font-en); font-size: clamp(12px, 2vw, 16px);
+  letter-spacing: .34em; color: var(--amber); text-indent: .34em;
+}
+.gate-title {
+  font-family: var(--font-display); font-weight: 800;
+  font-size: clamp(46px, 5.4vw, 92px); line-height: 1.1;
+  color: var(--cream); letter-spacing: .02em; margin-top: 4px;
+  text-shadow: 3px 3px 0 rgba(67, 53, 114, .85), 7px 7px 0 rgba(154, 127, 188, .38);
+}
+.gate-title .char { display: inline-block; }
+.gate-sub { color: var(--cream-dim); font-size: clamp(15px, 2.2vw, 19px); letter-spacing: .16em; margin-top: 10px; }
+.gate-sub em { font-style: normal; color: var(--amber); }
+/* 登录卡：灰粉纸底 + 墨色文字（与深色背景形成强反差），硬阴影印章感 */
+.gate-card {
+  width: min(380px, max(0px, calc(50vw + var(--gate-shift) - 32.5vh - 60px)));
+  background: #F3D1CA; color: #171327;
+  border: 2px solid #171327; border-radius: var(--r-panel);
+  box-shadow: 8px 8px 0 rgba(67, 53, 114, .9);
+  padding: 22px 26px 20px; text-align: left;
+}
+.gate-card .field { margin-bottom: 14px; }
+.gate-card .field label { color: #5A4A66; }
+.gate-card .field input {
+  background: rgba(23, 19, 39, .06);
+  border: 1px solid rgba(23, 19, 39, .28); border-radius: var(--r-input);
+  color: #171327; font-size: 15px;
+}
+.gate-card .field input::placeholder { color: rgba(90, 74, 102, .6); }
+.gate-card .field input:focus { border-color: var(--amber); background: rgba(232, 46, 79, .05); outline: none; }
+.gate-tabs {
+  display: flex; margin-bottom: 16px;
+  border: 1px solid rgba(23, 19, 39, .32); border-radius: var(--r-btn); overflow: hidden;
+}
+.gate-tabs button {
+  flex: 1; padding: 9px; background: transparent; color: #5A4A66;
+  border: 0; font-size: 15px; font-weight: 500;
+  transition: background .2s, color .2s;
+}
+.gate-tabs button + button { border-left: 1px solid rgba(23, 19, 39, .32); }
+.gate-tabs button.active { background: #171327; color: #F3D1CA; font-weight: 700; }
+.guest-btn {
+  display: block; margin: 12px auto 0; background: none; border: 0;
+  color: #5A4A66; font-size: 13.5px;
+}
+.guest-btn:hover { color: var(--amber-deep); }
+.gate-fx { position: absolute; inset: 0; z-index: 6; width: 100%; height: 100%; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .gate-echo { animation: none; }
+}
+
+/* ================= 首页 hero：整屏同人志封面海报 ================= */
+.hero {
+  --ht: clamp(88px, 10vw, 152px);   /* 主标题字号：比主作品收敛，让中间的画更突出 */
+  /* 一整屏：登录门开后首页就是一张完整的封面海报，所有内容都在这一屏里 */
+  /* 注意：不设 overflow:hidden——祖先裁剪会让 preserve-3d 的螺旋首帧画不出来（悬停才补） */
+  position: relative; min-height: 100dvh;
+}
+/* 半调网点：海报印刷颗粒（极淡，垫底） */
+.hero::before {
+  content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background-image: radial-gradient(rgba(154, 127, 188, .14) 1px, transparent 1.4px);
+  background-size: 24px 24px;
+}
+.hero-main { position: absolute; inset: 0; z-index: 1; }
+
+/* 背景印刷字（垫底的慢视差层） */
+.hero-masthead {
+  position: absolute; left: calc(clamp(28px, 4vw, 56px) + 6px);
+  top: calc(124px + var(--ht) * 1.02 + 62px);
+  z-index: 1;
+  font-family: var(--font-en); font-size: clamp(30px, 3.4vw, 52px);
+  letter-spacing: .18em; line-height: 1; white-space: nowrap;
+  color: transparent; -webkit-text-stroke: 1px rgba(154, 127, 188, .3);
+  pointer-events: none;
+}
+
+/* 超大主标题：构图主体，主作品在它正下方，不压字 */
+.hero-title {
+  position: absolute; left: clamp(28px, 4vw, 56px); top: 92px; z-index: 1;
+  font-size: var(--ht); line-height: 1.02; font-weight: 800;
+  color: var(--cream); letter-spacing: .01em;
+  text-shadow: 3px 3px 0 rgba(67, 53, 114, .85), 7px 7px 0 rgba(154, 127, 188, .38);
+}
+.hero-title .t-line { display: block; overflow: hidden; white-space: nowrap; padding: 0 10px 14px 0; }
+.hero-title .char { display: inline-block; }
+/* 副行：明显小于主标题，与主题区分 */
+.t-sub {
+  position: absolute; left: calc(clamp(28px, 4vw, 56px) + 10px);
+  top: calc(124px + var(--ht) * 1.02 + 18px);
+  z-index: 3;
+  font-size: clamp(17px, 1.9vw, 26px); font-weight: 700;
+  color: var(--cream); letter-spacing: .05em;
+}
+.t-sub em { font-style: normal; color: var(--amber); }
+
+/* 主作品：竖版海报比例，直角 + 双层硬阴影（套色错位）。
+   top 与标题同源：标题 top 92 + 行高 1.02×ht + 底部 padding 14 + 2px 间隙 → 海报上沿正好
+   压在标题块下沿，不再遮字；高度由 home.js 裁剪，下沿止于胶片条上方，互不重叠 */
+.hero-stage {
+  position: absolute; z-index: 2;
+  /* 左移给右上角的双螺旋塔让位（home.js plateDims 里同源镜像这个 41vw） */
+  left: clamp(470px, 41vw, 650px);
+  top: calc(92px + var(--ht) * 1.02 + 16px);
+  width: var(--pw, 400px); height: var(--ph, 566px);
+}
+.hero-art { position: absolute; inset: 0; display: block; transform: rotate(-2deg); }
+/* 两片套色阴影：跟在作品后面，视差时反向微移 */
+.ha-sh { position: absolute; inset: 14px 0 0 14px; background: #433572; }
+.ha-sh.s1 { margin: 11px 0 0 11px; z-index: 1; }
+.ha-sh.s2 { margin: 22px 0 0 22px; background: rgba(110, 90, 162, .45); z-index: 0; }
+.ha-reg {
+  position: absolute; inset: 0; z-index: 2;
+  background: #F3D1CA; overflow: hidden;
+}
+.ha-reg img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+}
+/* 印刷画框：纸边 + 细墨线 */
+.ha-reg::after {
+  content: ""; position: absolute; inset: 9px; z-index: 3; pointer-events: none;
+  border: 2px solid #F3D1CA;
+  box-shadow: 0 0 0 1px rgba(23, 19, 39, .38);
+}
+
+/* 核心操作「再添一笔」：海报印章（随主作品同组视差，最后落位） */
+/* 印章左移贴在海报右下角：右缘退到塔的卡片可达区之外（塔加高后卡片会扫到这里，别叠上） */
+.hero-cta { position: absolute; z-index: 4; left: calc(100% - 50px); top: 56%; display: block; }
+.hero-stage.landscape .hero-cta { left: auto; right: 18px; top: auto; bottom: 18px; }
+.hc-stamp {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 13px 26px 12px;
+  background: var(--amber); color: #F3D1CA;
+  border: 3px solid #F3D1CA; outline: 2px solid #171327;
+  transform: rotate(4deg);
+  box-shadow: 6px 6px 0 rgba(67, 53, 114, .9);
+  transition: transform .18s;
+}
+.hero-cta:hover .hc-stamp { transform: rotate(2deg) translateY(-2px); }
+.hc-main { font-family: var(--font-display); font-weight: 800; font-size: 26px; line-height: 1.15; white-space: nowrap; }
+.hc-sub2 { font-family: var(--font-en); font-size: 10px; letter-spacing: .22em; opacity: .85; }
+
+/* 辅助信息：期号 / 作品名 / 作者 / 日期 / 图层 / 点赞 / 序号（真实数据） */
+.hero-meta {
+  position: absolute; left: clamp(28px, 4vw, 56px); bottom: 128px; z-index: 3;
+  border-left: 3px solid var(--amber); padding-left: 18px;
+}
+.hm-issue { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.hm-issue .hm-k { font-family: var(--font-en); font-size: 11px; letter-spacing: .2em; color: var(--cream-dim); }
+.hm-issue .hm-v { font-family: var(--font-en); font-size: 22px; letter-spacing: .12em; color: var(--amber); }
+.hm-total { font-family: var(--font-en); font-size: 13px; letter-spacing: .12em; color: var(--cream-dim); }
+.hm-name { font-family: var(--font-display); font-weight: 800; font-size: clamp(23px, 2.6vw, 32px); color: var(--cream); line-height: 1.3; }
+.hm-by { display: flex; gap: 8px; align-items: center; color: var(--cream-dim); font-size: 13.5px; }
+.hm-dot { opacity: .6; }
+.hm-badges { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.hm-stats { display: flex; gap: 18px; align-items: center; margin-top: 8px; font-size: 13px; }
+.hm-like { color: var(--amber); }
+.hm-like b { font-size: 15px; }
+.hm-like-lab { color: var(--cream-dim); margin-left: 6px; }
+.hm-no { color: var(--cream-dim); letter-spacing: .06em; }
+/* 「翻开这一集」：灰粉纸小按钮（同硬阴影体系） */
+.hm-open {
+  display: inline-flex; align-items: center; gap: 7px;
+  margin-top: 13px; padding: 9px 16px 10px;
+  background: var(--cream); color: #171327;
+  border: 2px solid #171327; border-radius: 4px;
+  box-shadow: 4px 4px 0 rgba(67, 53, 114, .9);
+  font-family: var(--font-display); font-weight: 800; font-size: 14.5px;
+  transition: transform .18s, box-shadow .18s;
+}
+.hm-open:hover { transform: translate(-1px, -1px); box-shadow: 6px 6px 0 rgba(67, 53, 114, .9); }
+.hm-open:active { transform: translate(1px, 1px); box-shadow: 2px 2px 0 rgba(67, 53, 114, .9); }
+.hm-open .aro { font-family: var(--font-ui); transition: transform .18s; }
+.hm-open:hover .aro { transform: translateX(3px); }
+
+/* 上下幅翻页 */
+.hero-pager {
+  position: absolute; right: clamp(28px, 4vw, 56px); bottom: 128px; z-index: 3;
+  display: flex; align-items: center; gap: 12px;
+}
+.hp-hint { font-size: 12px; color: var(--cream-dim); letter-spacing: .08em; }
+.hp-btn {
+  width: 42px; height: 42px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid var(--line-strong);
+  color: var(--cream); font-size: 20px;
+  transition: background .15s, border-color .15s, transform .15s;
+}
+.hp-btn:hover { background: var(--amber); border-color: var(--amber); color: #F3D1CA; transform: translate(-1px, -1px); }
+
+/* 其他作品：底部胶片条（弱化，点选切换主作品） */
+.hero-film { position: absolute; left: 0; right: 0; bottom: 14px; z-index: 3; display: flex; justify-content: center; padding: 0 24px; }
+.hf-track {
+  display: flex; gap: 10px; padding: 6px 10px;
+  background: rgba(28, 22, 51, .55); border: 1px solid var(--line);
+  max-width: calc(100vw - 48px); overflow-x: auto; scrollbar-width: none;
+}
+.hf-track::-webkit-scrollbar { display: none; }
+.hf-th {
+  position: relative; flex: none; width: 54px; height: 72px; padding: 0;
+  border: 2px solid transparent; background: var(--ink-3);
+  cursor: pointer; overflow: hidden;
+  filter: saturate(.6) brightness(.72);
+  transition: filter .25s, transform .25s, border-color .25s;
+}
+.hf-th img { width: 100%; height: 100%; object-fit: cover; }
+.hf-lab {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: rgba(23, 19, 39, .86); color: var(--cream);
+  font-size: 9.5px; line-height: 15px; text-align: center;
+  padding: 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hf-th:hover { filter: saturate(.9) brightness(.9); }
+.hf-th.on { border-color: var(--amber); filter: none; transform: translateY(-5px); }
+.hf-th.on .hf-lab { color: var(--amber-hot); }
+
+/* 幕布：入场时向上揭开 */
+.hero-curtain {
+  position: absolute; inset: 0; z-index: 40;
+  background: linear-gradient(180deg, #F3D1CA 0%, #E7C3BA 52%, #D9AE9F 100%);
+  box-shadow: inset 0 -12px 44px rgba(23, 19, 39, .18);
+}
+.hero-curtain::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 10px;
+  background: #433572; opacity: .85;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-curtain { display: none; }
+}
+@media (max-width: 1100px) {
+  .hero { --ht: 11.5vw; }
+  .hero-stage { left: 54vw; }
+  .hero-masthead { display: none; }
+}
+/* 矮窗（高 ≤690：如 720p 屏上最大化的浏览器约 600~620 高）：竖排不够时
+   meta 块（242 高、底部锚定）顶部会顶进标语里（1280×600 实测压 9890px²）。
+   让位：标语上收（与主标题盒间隙 36→10）、meta 与翻页器同降 22px（离胶片条
+   仍留 ~6px）、meta 行距收紧、两枚小徽章收起；700+ 高窗口一行都不变 */
+@media (min-width: 761px) and (max-height: 690px) {
+  .t-sub { top: calc(124px + var(--ht) * 1.02 - 8px); }
+  .hero-meta { bottom: 106px; }
+  .hero-pager { bottom: 106px; }
+  .hero-meta .hm-issue { margin-bottom: 2px; }
+  .hero-meta .hm-badges { display: none; }
+  .hero-meta .hm-stats { margin-top: 4px; }
+  .hero-meta .hm-open { margin-top: 7px; }
+}
+
+/* 迷你螺旋（hero 右上角）：代表作盘成的三股螺旋塔缓缓上升；新手教程结束后落位在这里。
+   尺寸取值与 home.js plateDims 里的「海报右沿不进塔区」封顶保持一致 */
+.hero-spiral {
+  position: absolute; right: clamp(28px, 4.5vw, 84px); top: clamp(78px, 9vh, 118px);
+  width: clamp(280px, 24vw, 360px); height: clamp(360px, 54vh, 540px);
+  z-index: 3; perspective: 1400px;
+}
+@media (max-width: 1250px) { .hero-spiral { display: none; } }
+/* 窄屏下翻页提示文字会被海报压住，隐去文字只留箭头（按钮有 aria-label） */
+@media (max-width: 1250px) { .hp-hint { display: none; } }
+
+/* ---------- 手机（≤760，与 home.js plateDims 同步）：海报页改纵向长图流 ---------- */
+@media (max-width: 760px) {
+  .hero-main { position: relative; inset: auto; display: flex; flex-direction: column; padding: 104px 20px 96px; }
+  .hero-title { position: static; font-size: min(19vw, 76px); }
+  .t-sub { position: static; margin: 10px 0 0 2px; font-size: 17px; }
+  .hero-stage { position: relative; left: auto; top: auto; align-self: center; margin-top: 24px; }
+  /* 印章挂到海报正下方居中（舞台高度固定，静态流会叠在画上） */
+  .hero-stage .hero-cta, .hero-stage.landscape .hero-cta {
+    position: absolute; left: 50%; right: auto; top: calc(100% + 18px); bottom: auto;
+    transform: translateX(-50%);
+  }
+  .hero-cta .hc-stamp { transform: rotate(-3deg); }
+  .hero-meta { position: static; margin-top: 116px; }
+  .hero-pager { position: static; align-self: center; margin-top: 20px; }
+  .hero-film { position: static; margin-top: 26px; padding: 0; }
+  .hf-track { flex-wrap: wrap; justify-content: center; }
+}
+/* 3D 根给足实尺寸（0×0 的 preserve-3d 容器会让 Chromium 首帧跳过绘制、
+   悬停强制重绘才出现——螺旋渲染不全 bug 的主因）；卡片锚在环中心 */
+.spiral {
+  position: absolute; left: 0; top: 0;
+  width: 100%; height: 100%;
+  transform-style: preserve-3d;
+}
+/* 塔的中轴：一条淡淡的竖线，让「螺旋绕轴上升」一眼可读（纯装饰，不挡操作） */
+.spiral::before {
+  content: ""; position: absolute; left: 50%; top: 4%; bottom: 4%;
+  width: 2px; margin-left: -1px;
+  background: linear-gradient(180deg, transparent, rgba(154, 127, 188, .3) 28%, rgba(154, 127, 188, .3) 72%, transparent);
+}
+.orbit-card {
+  position: absolute; left: 50%; top: 50%;
+  width: var(--cw, 150px);
+  transform-style: preserve-3d;
+  cursor: pointer;
+}
+.orbit-card .frame {
+  position: relative; overflow: hidden;
+  background: var(--ink-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  box-shadow: 0 18px 44px rgba(8, 6, 18, .5);
+  transition: border-color .3s;
+}
+.orbit-card img { width: 100%; aspect-ratio: var(--r, 3/4); object-fit: cover; }
+.orbit-card .cap {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 26px 10px 8px;
+  background: linear-gradient(transparent, rgba(23, 19, 39, .92));
+  font-size: 12.5px; color: var(--cream);
+  display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden;
+}
+.orbit-card .cap .t { font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.orbit-card .cap .n { margin-left: auto; color: var(--amber-hot); font-size: 11.5px; }
+.orbit-card:hover .frame { border-color: var(--amber); }
+.orbit-card.lit .frame { box-shadow: 0 18px 44px rgba(8, 6, 18, .5), 0 0 44px rgba(110, 90, 162, .55); }
+.orbit-card.dim { filter: brightness(.45) saturate(.8); }
+/* 三股螺旋的塔架：环内三张连成三角箍、环间同股连成螺旋轨（由 home.js 放进 #spiral，
+   每帧算两端点位置/朝向/长度）——塔的骨架一眼可辨 */
+.rung-3d {
+  position: absolute; left: 50%; top: 50%;
+  height: 2px; margin-top: -1px;
+  background: rgba(154, 127, 188, .6);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+/* 塔身氛围插画：星星/爱心/太阳/铅笔/闪光等涂鸦小元素挂在中段一圈
+   （.doodle-3d 由 home.js 放进 #spiral，随教程借还一起飞；
+   Z 轴在塔身内侧 → 作品卡始终压在上层），内层 .doodle 做 bling 闪烁 */
+.spiral-glow {
+  position: absolute; left: 50%; top: 50%; width: 78%; height: 78%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(closest-side, rgba(110, 90, 162, .3), transparent 72%);
+  border-radius: 50%; pointer-events: none;
+}
+.doodle-3d { position: absolute; left: 50%; top: 50%; transform-style: preserve-3d; }
+.doodle {
+  display: block; width: 100%; height: 100%;
+  animation: doodleBling var(--db, 5.5s) ease-in-out var(--dd, 0s) infinite;
+}
+.doodle.warm { color: var(--amber); }
+.doodle.lav { color: #9A7FBC; }
+.doodle.cream { color: var(--cream); }
+.doodle svg { width: 100%; height: 100%; display: block; }
+@keyframes doodleBling {
+  0%, 100% { opacity: .5; transform: scale(.78); }
+  38% { opacity: 1; transform: scale(1.14); filter: drop-shadow(0 0 9px currentColor); }
+  55% { opacity: .95; transform: scale(.96); }
+  72% { opacity: .62; transform: scale(.85); }
+}
+@media (prefers-reduced-motion: reduce) { .doodle { animation: none; opacity: .85; } }
+
+/* 持续氛围特效画布：漂浮墨尘 + 二次元闪光（js/fx.js 绘制，幕布之下、内容之上） */
+.fx-layer {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  z-index: 25; pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) { .fx-layer { display: none; } }
+
+/* 底部裁切线：海报印刷的裁切标 */
+.hero::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; z-index: 5;
+  background: linear-gradient(90deg, transparent, rgba(232, 46, 79, .65) 18%, rgba(232, 46, 79, .65) 82%, transparent);
+  pointer-events: none;
+}
+
+/* ================= 新手教程：盖在虚化的首页上（第一次进门时） ================= */
+body.tour-on #site-nav, body.tour-on main, body.tour-on #site-footer { filter: blur(14px); }
+#site-nav, main, #site-footer { transition: filter .5s ease; }
+.tour {
+  position: fixed; inset: 0; z-index: 90;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.tour[hidden] { display: none; }   /* 自己设了 display:flex，需要显式压住 hidden 属性 */
+.tour-card {
+  position: relative; width: min(700px, 94vw); max-height: 92vh; overflow: auto;
+  background: #F3D1CA; color: #171327;
+  border: 2px solid #171327; border-radius: 4px;
+  box-shadow: 12px 12px 0 rgba(67, 53, 114, .9);
+  padding: 32px 38px 30px;
+}
+.tour-skip {
+  position: absolute; top: 12px; right: 16px; z-index: 2;
+  background: none; border: 0; color: #5A4A66; font-size: 13px;
+}
+.tour-skip:hover { color: var(--amber-deep); }
+.tour-eyebrow {
+  font-family: var(--font-en); font-size: 12px; letter-spacing: .22em;
+  color: var(--amber-deep); text-transform: uppercase;
+}
+.tour-h2 { font-size: clamp(26px, 3.4vw, 38px); margin: 8px 0 10px; line-height: 1.25; }
+.tour-p { color: #5A4A66; font-size: 14.5px; max-width: 56ch; }
+.tour-how { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin: 24px 0 20px; }
+.th-item { text-align: center; }
+.th-pic { height: 132px; overflow: hidden; border: 2px solid #171327; border-radius: 4px; }
+.th-pic img { width: 100%; height: 100%; object-fit: cover; }
+.th-word {
+  font-family: var(--font-display); font-weight: 800; font-size: 36px;
+  color: #171327; margin-top: 10px; line-height: 1.1;
+}
+.th-item p { color: #5A4A66; font-size: 13px; margin-top: 4px; }
+.tour-actions { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 22px; }
+.tour-actions .btn-text { color: #5A4A66; }
+.tour-spiral {
+  position: relative; height: clamp(300px, 46vh, 470px);
+  margin: 4px -12px 0; perspective: 1600px;
+  pointer-events: none;   /* 教程里的螺旋只看不点 */
+}
+@media (max-width: 640px) {
+  .tour-how { grid-template-columns: 1fr; }
+  .th-pic { height: 90px; }
+}
+</style>
+</head>
+<body>
+
+<a class="skip" href="#main">跳到正文</a>
+
+<!-- ===== 登录门：参考画作印在双开门上的海报（登录不居中，画占右边） ===== -->
+<div id="gate" class="gate">
+  <div class="gate-back" aria-hidden="true"></div>
+  <div class="gate-bg" aria-hidden="true">
+    <div class="gate-outline">MUR DE GRAFFITI</div>
+    <div class="gate-echo e1"></div>
+    <div class="gate-echo e2"></div>
+  </div>
+  <div class="gate-doors" id="gateDoors" aria-hidden="true">
+    <div class="door left" id="doorL"><span class="poster-piece"></span></div>
+    <div class="door right" id="doorR"><span class="poster-piece"></span></div>
+  </div>
+  <canvas class="fx-layer gate-fx" aria-hidden="true"></canvas>
+  <div class="gate-content">
+    <div class="gate-top">
+      <div class="gate-en">Mur de graffiti · vol.01</div>
+      <h1 class="gate-title" id="gateTitle">涂鸦画廊</h1>
+      <p class="gate-sub">别人的画，<em>再添一笔</em></p>
+    </div>
+
+    <div class="gate-card" id="loginCard">
+      <div class="gate-tabs">
+        <button id="tabLogin" class="active" onclick="gateTab('login')">登录</button>
+        <button id="tabReg" onclick="gateTab('reg')">注册</button>
+      </div>
+      <div class="field" id="rowName" style="display:none">
+        <label for="fName">昵称（起个涂鸦名）</label>
+        <input id="fName" placeholder="比如：夜行猫">
+      </div>
+      <div class="field">
+        <label for="fPass">密码</label>
+        <input id="fPass" type="password" placeholder="随便填一个密码">
+      </div>
+      <div class="field" id="rowPass2" style="display:none">
+        <label for="fPass2">再输一遍密码</label>
+        <input id="fPass2" type="password" placeholder="和上面一致">
+      </div>
+      <button class="btn" style="width:100%" onclick="gateSubmit()" id="submitBtn">登 录</button>
+      <button class="guest-btn" onclick="guestIn()">先不注册，以游客身份逛逛</button>
+    </div>
+
+    <div class="gate-card" id="welcomeCard" style="display:none">
+      <p style="font-family:var(--font-display);font-weight:800;font-size:19px;color:#171327">欢迎回来，<span id="welcomeName" style="color:var(--amber-deep)"></span></p>
+      <button class="btn" style="width:100%;margin-top:14px" onclick="window.openGate()">继续逛画廊</button>
+    </div>
+  </div>
+</div>
+
+<header id="site-nav" data-active="home"></header>
+
+<main id="main">
+
+  <!-- ===== hero：一整屏同人志封面海报（首页唯一内容） ===== -->
+  <section class="hero" id="hero">
+    <canvas class="fx-layer hero-fx" aria-hidden="true"></canvas>
+    <div class="hero-main" id="heroMain">
+      <div class="hero-masthead" aria-hidden="true">MUR DE GRAFFITI</div>
+
+      <h1 class="hero-title" id="heroTitle">
+        <span class="t-line">涂鸦画廊</span>
+      </h1>
+      <p class="t-sub">别人的画，<em>再添一笔</em></p>
+
+      <div class="hero-stage" id="heroStage">
+        <a class="hero-art" id="heroArt" href="artwork.html?id=w101" aria-label="翻开这一集">
+          <span class="ha-sh s2" aria-hidden="true"></span>
+          <span class="ha-sh s1" aria-hidden="true"></span>
+          <span class="ha-reg">
+            <img id="heroImg" src="assets/art/w101.jpg" alt="文创设计">
+          </span>
+        </a>
+        <a class="hero-cta" id="heroCta" href="artwork.html?id=w101" aria-label="再添一笔：在封面上涂鸦">
+          <span class="hc-stamp">
+            <span class="hc-main">再添一笔</span>
+            <span class="hc-sub2">Add a layer</span>
+          </span>
+        </a>
+      </div>
+
+      <!-- 迷你螺旋：每个作品集挑出的代表画盘成一座三股螺旋塔（新手教程里放大展示，结束后飞回这里） -->
+      <div class="hero-spiral" id="heroSpiral">
+        <div class="spiral" id="spiral"></div>
+      </div>
+
+      <div class="hero-meta" id="heroMeta">
+        <div class="hm-issue"><span class="hm-k en">Set</span><span class="hm-v" id="heroIssue">01</span><span class="hm-total" id="heroTotal">/ 07</span></div>
+        <div class="hm-name" id="heroName">文创设计</div>
+        <div class="hm-by"><span id="heroAuthor">朱涵书</span><span class="hm-dot">·</span><span id="heroDate">共 9 幅</span></div>
+        <div class="hm-badges">
+          <span class="sticker amber" id="heroCat">手绘</span>
+          <span class="sticker" id="heroCoverBadge">本集封面 · 设计1</span>
+        </div>
+        <div class="hm-stats"><span class="hm-like">❤ <b id="heroLikes">0</b><span class="hm-like-lab">全集点赞</span></span></div>
+        <a class="hm-open" id="heroOpen" href="set.html?id=s1">翻开这一集 · <span class="open-n">9</span> 幅 <span class="aro">→</span></a>
+      </div>
+
+      <div class="hero-pager">
+        <span class="hp-hint">上一集 / 下一集</span>
+        <button class="hp-btn" id="heroPrev" aria-label="上一集">‹</button>
+        <button class="hp-btn" id="heroNext" aria-label="下一集">›</button>
+      </div>
+
+      <div class="hero-film">
+        <div class="hf-track" id="heroFilm"></div>
+      </div>
+
+      <div class="hero-curtain" id="heroCurtain" aria-hidden="true"></div>
+    </div>
+  </section>
+
+</main>
+
+<footer id="site-footer"></footer>
+
+<!-- ===== 新手教程：第一次进门时浮在虚化的首页上 ===== -->
+<div class="tour" id="tour" hidden>
+  <div class="tour-card" id="tourCard">
+    <button class="tour-skip" id="tourSkip">跳过教程</button>
+
+    <div class="tour-step" id="tourStep1">
+      <div class="tour-eyebrow">玩法速览 · 3 招</div>
+      <h2 class="tour-h2">一张画，越画越热闹</h2>
+      <p class="tour-p">别人传上来的画，谁都可以在上面新建图层——原作品完整保留、署名清晰，人越多画越热闹。</p>
+      <div class="tour-how">
+        <div class="th-item">
+          <div class="th-pic"><img src="assets/art/w101.jpg" alt="在画上新建图层涂鸦"></div>
+          <div class="th-word">画</div>
+          <p>选颜色和粗细，直接在画上涂</p>
+        </div>
+        <div class="th-item">
+          <div class="th-pic"><img src="assets/art/w701.jpg" alt="图层开关示意"></div>
+          <div class="th-word">开</div>
+          <p>图层自由开关，逐层对比</p>
+        </div>
+        <div class="th-item">
+          <div class="th-pic"><img src="assets/materials/m01.png" alt="拼贴示意"></div>
+          <div class="th-word">拼</div>
+          <p>收藏进画布，自由拼贴</p>
+        </div>
+      </div>
+      <div class="tour-actions">
+        <button class="btn" id="tourNext">下一步</button>
+      </div>
+    </div>
+
+    <div class="tour-step" id="tourStep2" hidden>
+      <h2 class="tour-h2">作品盘旋而上</h2>
+      <p class="tour-p">每个作品集挑出的代表画盘成一座不停往上长的塔——看中哪幅点哪幅，每一幅都能再添一笔。</p>
+      <div class="tour-spiral" id="tourSpiral"></div>
+      <div class="tour-actions">
+        <button class="btn-text" id="tourBack">← 上一步</button>
+        <button class="btn" id="tourStart">让我们开始吧！</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="assets/lib/gsap/gsap.min.js"></script>
+<script src="assets/lib/gsap/ScrollTrigger.min.js"></script>
+<script src="assets/lib/gsap/SplitText.min.js"></script>
+<script src="js/data.js"></script>
+<script src="js/common.js"></script>
+<script src="js/gate.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/home.js"></script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>作品集 · AI“涂鸦画廊”</title>
+<meta name="description" content="作品集详情：一集里的全部作品陈列在这里，点开任意一幅就是这一集的书本，从那页翻起。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='4' fill='%23171327'/%3E%3Ccircle cx='32' cy='33' r='15' fill='%23E82E4F'/%3E%3Ccircle cx='17' cy='16' r='3.5' fill='%239A7FBC'/%3E%3Ccircle cx='48' cy='13' r='2.5' fill='%23F3D1CA'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/common.css">
+<style>
+.set-head { padding: 118px 0 8px; }
+.set-head .eyebrow { margin-bottom: 14px; }
+.set-title-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.set-head h1 { font-size: clamp(34px, 5.2vw, 58px); color: var(--cream); line-height: 1.2; }
+.set-head h1 .amber { color: var(--amber); }
+.set-meta { color: var(--cream-dim); margin-top: 12px; font-size: 14.5px; }
+.set-actions { display: flex; align-items: center; gap: 14px; margin-top: 22px; flex-wrap: wrap; }
+.set-hint { color: var(--cream-dim); font-size: 13px; }
+
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; margin-top: 40px; }
+@media (max-width: 1000px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+
+.art-card {
+  position: relative; display: block; overflow: hidden;
+  background: var(--ink-2); border: 1px solid var(--line); border-radius: var(--r-card);
+  transform-style: preserve-3d; will-change: transform;
+  transition: border-color .25s, box-shadow .25s;
+}
+.art-card:hover { border-color: rgba(232, 46, 79, .5); box-shadow: var(--shadow-soft), var(--glow-amber); }
+/* 作品集内页用「原样展示」：contain 不裁切，长边完整看得见 */
+.art-card .pic { aspect-ratio: 4/3.5; overflow: hidden; position: relative; }
+.art-card .pic img { width: 100%; height: 100%; object-fit: contain; transition: transform .5s cubic-bezier(.16,1,.3,1); }
+.art-card:hover .pic img { transform: scale(1.05); }
+.art-card .w-no {
+  position: absolute; top: 10px; left: 10px; z-index: 2;
+  font-family: var(--font-en); font-size: 12px; letter-spacing: .14em;
+  color: var(--cream); background: rgba(23, 19, 39, .72);
+  border: 1px solid var(--line-strong); border-radius: 3px; padding: 1px 7px 2px;
+}
+.art-card .layer-badge { position: absolute; top: 10px; right: 10px; z-index: 2; }
+.art-card .info { padding: 12px 16px 15px; }
+.art-card .info .t { font-family: var(--font-display); font-weight: 800; font-size: 18px; color: var(--cream); }
+.art-card .info .meta { display: flex; gap: 9px; align-items: center; margin-top: 6px; flex-wrap: wrap; font-size: 12.5px; color: var(--cream-dim); }
+.art-card .info .meta .likes { margin-left: auto; color: var(--amber-hot); }
+
+.set-pager {
+  display: flex; justify-content: space-between; gap: 16px; align-items: center;
+  margin-top: 54px; padding-top: 22px; border-top: 1px solid var(--line);
+  font-size: 14.5px;
+}
+.set-pager a { color: var(--cream-dim); transition: color .2s; }
+.set-pager a:hover { color: var(--amber-hot); }
+.set-pager .sp-r { text-align: right; }
+.set-pager .sp-k { font-family: var(--font-en); font-size: 11px; letter-spacing: .2em; color: var(--cream-dim); display: block; }
+.set-pager .sp-v { font-family: var(--font-display); font-weight: 800; color: var(--cream); font-size: 17px; }
+</style>
+</head>
+<body>
+
+<a class="skip" href="#main">跳到正文</a>
+
+<header id="site-nav" data-active="gallery"></header>
+
+<main class="wrap" id="main">
+  <div class="set-head">
+    <div class="eyebrow">Mur de graffiti · 作品集</div>
+    <div class="set-title-row">
+      <h1 id="setName">作品集</h1>
+      <span class="sticker amber" id="setCat" hidden></span>
+    </div>
+    <p class="set-meta" id="setMeta"></p>
+    <div class="set-actions">
+      <a class="btn" id="setOpen" href="artwork.html">翻开书本</a>
+      <span class="set-hint">点下面任意一幅 · 直接从那一页翻起</span>
+    </div>
+  </div>
+
+  <div class="grid" id="setGrid"></div>
+
+  <div class="set-pager" id="setPager"></div>
+</main>
+
+<footer id="site-footer"></footer>
+
+<script src="assets/lib/gsap/gsap.min.js"></script>
+<script src="assets/lib/gsap/ScrollTrigger.min.js"></script>
+<script src="js/data.js"></script>
+<script src="js/common.js"></script>
+<script src="js/set.js"></script>
+</body>
+</html>

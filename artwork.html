@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>作品 · AI“涂鸦画廊”</title>
+<meta name="description" content="书本翻页浏览这一集的全部作品：在他人作品上新建图层涂鸦、开关图层、点赞收藏、写批注。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='4' fill='%23171327'/%3E%3Ccircle cx='32' cy='33' r='15' fill='%23E82E4F'/%3E%3Ccircle cx='17' cy='16' r='3.5' fill='%239A7FBC'/%3E%3Ccircle cx='48' cy='13' r='2.5' fill='%23F3D1CA'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/common.css">
+<style>
+.book-page { padding-top: 64px; }
+
+/* ---------- 顶栏 ---------- */
+.book-top {
+  max-width: 1440px; margin: 0 auto; padding: 18px 24px 0;
+  display: flex; align-items: center; gap: 18px;
+}
+.back-link {
+  display: inline-flex; align-items: center; gap: 8px;
+  color: var(--cream-dim); font-size: 14px; white-space: nowrap;
+}
+.back-link:hover { color: var(--amber); }
+.book-top .cur-title {
+  font-family: var(--font-display); font-weight: 800; font-size: 17px;
+  color: var(--cream); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+}
+.book-top .cur-meta { font-size: 12.5px; color: var(--cream-dim); white-space: nowrap; }
+
+/* ---------- 书 + 信息面板 ---------- */
+.book-layout {
+  max-width: 1440px; margin: 0 auto; padding: 8px 24px 40px;
+  display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 34px; align-items: start;
+}
+@media (max-width: 1060px) {
+  /* minmax(0,1fr)：底下缩略条 min-content 有 650px，用 1fr 会把这一列顶出屏宽 */
+  .book-layout { grid-template-columns: minmax(0, 1fr); }
+  .info-panel { order: 2; }
+}
+/* 手机：整屏书改固定高的小舞台，书宽由 sizeBook 按舞台宽收窄 */
+@media (max-width: 760px) {
+  .book-layout { padding: 8px 14px 34px; }
+  .book-stage { height: min(118vw, 540px); min-height: 360px; }
+  .book-ctrl { width: 40px; height: 40px; }
+}
+
+/* ---------- 书本舞台 ---------- */
+.book-stage {
+  position: relative;
+  height: calc(100dvh - 210px); min-height: 520px;
+  perspective: 2400px; perspective-origin: 50% 46%;
+}
+.book {
+  position: absolute; left: 50%; top: 50%;
+  width: var(--bw, 520px); height: var(--bh, 720px);
+  margin: calc(var(--bh, 720px) / -2) 0 0 calc(var(--bw, 520px) / -2);
+  transform-style: preserve-3d;
+  transform: rotateY(-13deg) rotateX(5deg);
+  will-change: transform;
+}
+.sheet {
+  position: absolute; inset: 0;
+  transform-style: preserve-3d;
+  transform-origin: left center;
+  will-change: transform;
+}
+.sheet .face {
+  position: absolute; inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: 3px 10px 10px 3px;
+  overflow: hidden;
+}
+.sheet .face.front {
+  background: #F2E8D5;
+  box-shadow: inset -14px 0 26px -18px rgba(43, 22, 8, .35), inset 8px 0 10px -10px rgba(255, 246, 232, .9);
+}
+.sheet .face.back {
+  transform: rotateY(180deg);
+  background: linear-gradient(90deg, #4A2F17, #2B1608);
+  box-shadow: inset 14px 0 26px -18px rgba(43, 22, 8, .6);
+}
+/* 封面：深靛蓝底 + 薰衣草光（猩红留给扉页以外的强调） */
+.sheet.cover .face.front {
+  background:
+    radial-gradient(340px 340px at 82% 12%, rgba(110, 90, 162, .45), transparent 70%),
+    linear-gradient(150deg, #2E2465, #21194F 70%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  text-align: center; padding: 30px;
+}
+.sheet.cover .face.front .c-en { font-family: var(--font-en); letter-spacing: .3em; color: #F3D1CA; font-size: 13px; text-indent: .3em; }
+.sheet.cover .face.front .c-t { font-family: var(--font-display); font-weight: 800; font-size: clamp(30px, 4.6vw, 46px); color: #F3D1CA; line-height: 1.35; }
+.sheet.cover .face.front .c-sub { color: rgba(243, 209, 202, .8); font-size: 14px; }
+/* 书页内容 */
+.page {
+  position: absolute; inset: 0; padding: 7% 9% 12%;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.page .mat {
+  position: relative; margin: 0 auto; flex: none;
+  border: 1px solid rgba(43, 22, 8, .5); border-radius: 2px;
+  box-shadow: 0 10px 30px -12px rgba(43, 22, 8, .3);
+  background: #EDE2CD;
+}
+.page .mat img.base { width: 100%; height: 100%; object-fit: cover; }
+.page .mat .layers { position: absolute; inset: 0; }
+.page .mat .layers img { position: absolute; inset: 0; width: 100%; height: 100%; }
+.page.hide-layers .mat .layers { display: none; }
+.page .cap {
+  margin-top: 14px; text-align: center;
+  font-family: var(--font-ui); color: #6B5B3E;
+}
+.page .cap .t { font-family: var(--font-display); font-weight: 800; font-size: 17px; color: #4A3B22; }
+.page .cap .m { font-size: 12px; letter-spacing: .06em; margin-top: 2px; }
+.page .page-no {
+  position: absolute; bottom: 4.5%; left: 0; right: 0;
+  text-align: center; font-size: 11px; color: #A8987A; letter-spacing: .2em;
+}
+/* 翻页时的阴影 */
+.sheet .face.front::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 78%, rgba(43, 22, 8, .28));
+  opacity: 0; transition: opacity .35s;
+}
+.sheet.flipping .face.front::after { opacity: 1; }
+.book-shadow {
+  position: absolute; left: 50%; top: 50%;
+  width: var(--bw, 520px); height: var(--bh, 720px);
+  margin: calc(var(--bh, 720px) / 2 + 34px) 0 0 calc(var(--bw, 520px) / -2 - 40px);
+  background: radial-gradient(closest-side, rgba(43, 22, 8, .35), transparent 70%);
+  filter: blur(10px); transform: rotateX(78deg);
+  pointer-events: none;
+}
+
+/* 翻页按钮 + 点击区 */
+.book-ctrl {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 48px; height: 48px; border-radius: 4px; z-index: 5;
+  background: rgba(33, 25, 79, .92); border: 1px solid var(--line-strong);
+  color: var(--cream); display: flex; align-items: center; justify-content: center;
+  transition: border-color .2s, background .2s;
+}
+.book-ctrl:hover { border-color: var(--amber); color: var(--amber); }
+.book-ctrl.prev { left: max(2px, calc(50% - var(--bw, 520px) / 2 - 72px)); }
+.book-ctrl.next { right: max(2px, calc(50% - var(--bw, 520px) / 2 - 72px)); }
+.book-ctrl:disabled { opacity: .3; cursor: default; }
+
+/* 缩略图书签条 */
+.book-strip {
+  margin: 26px auto 0; max-width: 900px;
+  display: flex; gap: 10px; overflow-x: auto; padding: 6px 10px 12px;
+}
+.book-strip button {
+  flex: none; width: 54px; padding: 0; border-radius: 6px; overflow: hidden;
+  border: 2px solid transparent; background: none; position: relative;
+  transition: border-color .2s, transform .2s;
+}
+.book-strip button img { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 4px; }
+.book-strip button:hover { transform: translateY(-3px); }
+.book-strip button.on { border-color: var(--amber); }
+.book-strip .cov {
+  width: 100%; aspect-ratio: 3/4; border-radius: 4px;
+  background: linear-gradient(150deg, #E82E4F, #B81F3E);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-en); color: #F3D1CA; font-size: 13px;
+}
+
+/* ---------- 信息面板 ---------- */
+.panel {
+  background: rgba(33, 25, 79, .85);
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  padding: 22px; margin-bottom: 18px;
+}
+.panel h3 { font-size: 15px; color: var(--amber); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.panel h3 .ico { width: 16px; height: 16px; }
+.art-title { font-family: var(--font-display); font-weight: 800; font-size: 26px; color: var(--cream); line-height: 1.35; }
+.art-author { display: flex; align-items: center; gap: 10px; margin: 14px 0 4px; }
+.art-author .avatar {
+  width: 38px; height: 38px; border-radius: 4px;
+  background: var(--amber); color: #F3D1CA;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 17px;
+}
+.art-author .who { font-size: 14.5px; color: var(--cream); font-weight: 700; }
+.art-author .when { font-size: 12px; color: var(--cream-dim); }
+.art-note { font-size: 12.5px; color: var(--cream-dim); margin-top: 12px; }
+
+.art-actions { display: flex; gap: 12px; margin: 16px 0; }
+.big-action {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 12px; background: rgba(232, 46, 79, .08);
+  border: 1px solid var(--line-strong); border-radius: var(--r-btn);
+  font-size: 15px; font-weight: 700; color: var(--cream);
+  transition: border-color .2s, color .2s, transform .15s;
+}
+.big-action:hover { border-color: var(--amber); color: var(--amber-hot); }
+.big-action:active { transform: scale(.98); }
+.big-action.liked { border-color: rgba(232, 46, 79, .7); color: var(--heart); }
+
+/* 图层列表 */
+.layer-row {
+  border: 1px solid var(--line); border-radius: 4px;
+  background: rgba(154, 127, 188, .08); padding: 10px 12px; margin-bottom: 10px;
+  transition: opacity .25s;
+}
+.layer-row.off { opacity: .5; }
+.layer-row .lr-top { display: flex; align-items: center; gap: 8px; }
+.layer-row .eye {
+  background: none; border: 1px solid var(--line-strong); border-radius: 4px;
+  color: var(--cream-dim); width: 28px; height: 28px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.layer-row .eye:hover { border-color: var(--amber); color: var(--amber); }
+.layer-row .lr-who { font-size: 13.5px; color: var(--cream); font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layer-row .lr-when { font-size: 11.5px; color: var(--cream-dim); }
+.layer-row .lr-btn { background: none; border: 0; color: var(--cream-dim); font-size: 12.5px; padding: 3px 6px; }
+.layer-row .lr-btn:hover { color: var(--amber); }
+.layer-row .lr-btn.liked { color: var(--heart); }
+.layer-cmts { margin-top: 9px; border-top: 1px dashed var(--line); padding-top: 9px; display: none; }
+.layer-cmts.open { display: block; }
+.layer-cmts .c-item { font-size: 13px; margin: 4px 0; color: var(--cream-dim); }
+.layer-cmts .c-item b { color: var(--amber); }
+.layer-cmts .c-add { display: flex; gap: 6px; margin-top: 8px; }
+.layer-cmts .c-add input {
+  flex: 1; padding: 7px 10px; min-width: 0;
+  background: rgba(28, 22, 51, .9); color: var(--cream);
+  border: 1px solid var(--line); border-radius: var(--r-input); font-size: 13px;
+}
+.layer-cmts .c-add input:focus { border-color: var(--amber); outline: none; }
+.layer-empty { font-size: 13px; color: var(--cream-dim); padding: 4px 0; }
+
+/* 批注 */
+.c-item { padding: 9px 0; border-bottom: 1px dashed var(--line); }
+.c-item b { color: var(--amber); font-size: 13.5px; }
+.c-item .ct { font-size: 14px; color: var(--cream); margin-top: 2px; }
+.c-item .when { font-size: 11.5px; color: var(--cream-dim); }
+.c-add { display: flex; gap: 8px; margin-top: 12px; }
+.c-add input {
+  flex: 1; min-width: 0; padding: 9px 12px;
+  background: rgba(28, 22, 51, .9); color: var(--cream);
+  border: 1px solid var(--line); border-radius: var(--r-input); font-size: 13.5px;
+}
+.c-add input:focus { border-color: var(--amber); outline: none; }
+
+/* ---------- 全屏涂鸦画布（原图打底，透明画布叠上） ---------- */
+.draw-overlay {
+  position: fixed; inset: 0; z-index: 120; display: none;
+  background: rgba(20, 16, 33, .82);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  align-items: center; justify-content: center; flex-direction: column; gap: 18px;
+  padding: 20px;
+}
+.draw-overlay.open { display: flex; }
+.draw-box {
+  position: relative;
+  border: 1px solid var(--line-strong); border-radius: 8px;
+  box-shadow: var(--shadow-soft); overflow: hidden;
+}
+.draw-base { position: absolute; inset: 0; background: var(--ink-1); }
+.draw-base img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.draw-box canvas {
+  position: absolute; inset: 0;
+  display: block; cursor: crosshair; touch-action: none;
+  background: transparent;
+}
+.draw-bar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px;
+  padding: 13px 18px;
+  background: rgba(33, 25, 79, .94); border: 1px solid var(--line-strong);
+  border-radius: 4px; box-shadow: var(--shadow-soft);
+}
+.draw-bar .sep { width: 1px; height: 20px; background: var(--line-strong); }
+.swatch {
+  width: 24px; height: 24px; border-radius: 4px; border: 2px solid rgba(154, 127, 188, .5);
+  transition: transform .15s;
+}
+.swatch:hover { transform: scale(1.2); }
+.swatch.on { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(232, 46, 79, .35); }
+.draw-bar input[type="range"] { width: 100px; accent-color: var(--amber); }
+.draw-bar .hint { font-size: 12.5px; color: var(--cream-dim); }
+</style>
+</head>
+<body>
+
+<a class="skip" href="#main">跳到正文</a>
+
+<header id="site-nav" data-active="gallery"></header>
+
+<main id="main" class="book-page">
+
+  <div class="book-top">
+    <a class="back-link" id="backLink" href="gallery.html"><span class="ico" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0yMjQsMTI4YTgsOCwwLDAsMS04LDhINTkuMzFsNTguMzUsNTguMzRhOCw4LDAsMCwxLTExLjMyLDExLjMybC03Mi03MmE4LDgsMCwwLDEsMC0xMS4zMmw3Mi03MmE4LDgsMCwwLDEsMTEuMzIsMTEuMzJMNTkuMzEsMTIwSDIxNkE4LDgsMCwwLDEsMjI0LDEyOFoiLz48L3N2Zz4=')"></span>返回这一集</a>
+    <span class="cur-title" id="curTitle"></span>
+    <span class="cur-meta" id="curMeta"></span>
+  </div>
+
+  <div class="book-layout" id="bookLayout">
+
+    <div>
+      <div class="book-stage" id="bookStage">
+        <div class="book-shadow"></div>
+        <div class="book" id="book"></div>
+        <button class="book-ctrl prev" id="btnPrev" aria-label="上一页"><span class="ico" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0xNjUuNjYsMjAyLjM0YTgsOCwwLDAsMS0xMS4zMiwxMS4zMmwtODAtODBhOCw4LDAsMCwxLDAtMTEuMzJsODAtODBhOCw4LDAsMCwxLDExLjMyLDExLjMyTDkxLjMxLDEyOFoiLz48L3N2Zz4=')"></span></button>
+        <button class="book-ctrl next" id="btnNext" aria-label="下一页"><span class="ico" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0xODEuNjYsMTMzLjY2bC04MCw4MGE4LDgsMCwwLDEtMTEuMzItMTEuMzJMMTY0LjY5LDEyOCw5MC4zNCw1My42NmE4LDgsMCwwLDEsMTEuMzItMTEuMzJsODAsODBBOCw4LDAsMCwxLDE4MS42NiwxMzMuNjZaIi8+PC9zdmc+')"></span></button>
+      </div>
+      <div class="book-strip" id="bookStrip"></div>
+    </div>
+
+    <aside class="info-panel">
+      <div class="panel">
+        <div class="art-title" id="artTitle"></div>
+        <div class="art-author">
+          <span class="avatar" id="authorAvatar"></span>
+          <div><div class="who" id="authorName"></div><div class="when" id="artTime"></div></div>
+        </div>
+        <div id="tagRow" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+        <div class="art-actions">
+          <button class="big-action" id="likeBtn" onclick="doLike(event)">
+            <span class="ico" id="likeIcon" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0xNzgsNDBjLTIwLjY1LDAtMzguNzMsOC44OC01MCwyMy44OUMxMTYuNzMsNDguODgsOTguNjUsNDAsNzgsNDBhNjIuMDcsNjIuMDcsMCwwLDAtNjIsNjJjMCw3MCwxMDMuNzksMTI2LjY2LDEwOC4yMSwxMjlhOCw4LDAsMCwwLDcuNTgsMEMxMzYuMjEsMjI4LjY2LDI0MCwxNzIsMjQwLDEwMkE2Mi4wNyw2Mi4wNywwLDAsMCwxNzgsNDBaTTEyOCwyMTQuOEMxMDkuNzQsMjA0LjE2LDMyLDE1NS42OSwzMiwxMDJBNDYuMDYsNDYuMDYsMCwwLDEsNzgsNTZjMTkuNDUsMCwzNS43OCwxMC4zNiw0Mi42LDI3YTgsOCwwLDAsMCwxNC44LDBjNi44Mi0xNi42NywyMy4xNS0yNyw0Mi42LTI3YTQ2LjA2LDQ2LjA2LDAsMCwxLDQ2LDQ2QzIyNCwxNTUuNjEsMTQ2LjI0LDIwNC4xNSwxMjgsMjE0LjhaIi8+PC9zdmc+')"></span>
+            <span id="likeCount">0</span>
+          </button>
+          <button class="big-action" id="favBtn" onclick="doFav()">
+            <span class="ico" id="favIcon" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0xODQsMzJINzJBMTYsMTYsMCwwLDAsNTYsNDhWMjI0YTgsOCwwLDAsMCwxMi4yNCw2Ljc4TDEyOCwxOTMuNDNsNTkuNzcsMzcuMzVBOCw4LDAsMCwwLDIwMCwyMjRWNDhBMTYsMTYsMCwwLDAsMTg0LDMyWm0wLDE3Ny41Ny01MS43Ny0zMi4zNWE4LDgsMCwwLDAtOC40OCwwTDcyLDIwOS41N1Y0OEgxODRaIi8+PC9zdmc+')"></span>
+            <span id="favText">收藏</span>
+          </button>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="btn-ghost small" id="holdCompare"
+            onpointerdown="setCompare(true)" onpointerup="setCompare(false)" onpointerleave="setCompare(false)">
+            按住看原图
+          </button>
+          <button class="btn small" onclick="openDraw()">
+            <span class="ico" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0yMzIsMzJhOCw4LDAsMCwwLTgtOGMtNDQuMDgsMC04OS4zMSw0OS43MS0xMTQuNDMsODIuNjNBNjAsNjAsMCwwLDAsMzIsMTY0YzAsMzAuODgtMTkuNTQsNDQuNzMtMjAuNDcsNDUuMzdBOCw4LDAsMCwwLDE2LDIyNEg5MmE2MCw2MCwwLDAsMCw1Ny4zNy03Ny41N0MxODIuMywxMjEuMzEsMjMyLDc2LjA4LDIzMiwzMlpNOTIsMjA4SDM0LjYzQzQxLjM4LDE5OC40MSw0OCwxODMuOTIsNDgsMTY0YTQ0LDQ0LDAsMSwxLDQ0LDQ0Wm0zMi40Mi05NC40NXE1LjE0LTYuNjYsMTAuMDktMTIuNTVBNzYuMjMsNzYuMjMsMCwwLDEsMTU1LDEyMS40OXEtNS45LDQuOTQtMTIuNTUsMTAuMDlBNjAuNTQsNjAuNTQsMCwwLDAsMTI0LjQyLDExMy41NVptNDIuNy0yLjY4YTkyLjU3LDkyLjU3LDAsMCwwLTIyLTIyYzMxLjc4LTM0LjUzLDU1Ljc1LTQ1LDY5LjktNDcuOTFDMjEyLjE3LDU1LjEyLDIwMS42NSw3OS4wOSwxNjcuMTIsMTEwLjg3WiIvPjwvc3ZnPg==')"></span>画一笔
+          </button>
+        </div>
+        <p class="art-note">本作品开放共享与二创。你的每一笔都是独立图层，原作品完整保留、署名清晰。</p>
+      </div>
+
+      <div class="panel">
+        <h3><span class="ico" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0xMiwxMTFsMTEyLDY0YTgsOCwwLDAsMCw3Ljk0LDBsMTEyLTY0YTgsOCwwLDAsMCwwLTEzLjlsLTExMi02NGE4LDgsMCwwLDAtNy45NCwwbC0xMTIsNjRBOCw4LDAsMCwwLDEyLDExMVpNMTI4LDQ5LjIxLDIyMy44NywxMDQsMTI4LDE1OC43OSwzMi4xMywxMDRaTTI0Ni45NCwxNDBBOCw4LDAsMCwxLDI0NCwxNTFMMTMyLDIxNWE4LDgsMCwwLDEtNy45NCwwTDEyLDE1MUE4LDgsMCwwLDEsMjAsMTM3LjA1bDEwOCw2MS43NCwxMDgtNjEuNzRBOCw4LDAsMCwxLDI0Ni45NCwxNDBaIi8+PC9zdmc+')"></span>图层</h3>
+        <div id="layerList"></div>
+      </div>
+
+      <div class="panel">
+        <h3><span class="ico" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0xMjgsMjRBMTA0LDEwNCwwLDAsMCwzNi4xOCwxNzYuODhMMjQuODMsMjEwLjkzYTE2LDE2LDAsMCwwLDIwLjI0LDIwLjI0bDM0LjA1LTExLjM1QTEwNCwxMDQsMCwxLDAsMTI4LDI0Wm0wLDE5MmE4Ny44Nyw4Ny44NywwLDAsMS00NC4wNi0xMS44MSw4LDgsMCwwLDAtNi41NC0uNjdMNDAsMjE2LDUyLjQ3LDE3OC42YTgsOCwwLDAsMC0uNjYtNi41NEE4OCw4OCwwLDEsMSwxMjgsMjE2WiIvPjwvc3ZnPg==')"></span>批注</h3>
+        <div id="commentList"></div>
+        <div class="c-add">
+          <input id="commentInput" placeholder="写点什么（登录后即可发布）">
+          <button class="btn small" onclick="sendComment()">发布</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<footer id="site-footer"></footer>
+
+<!-- 全屏涂鸦画布 -->
+<div class="draw-overlay" id="drawOverlay">
+  <div class="draw-box" id="drawBox">
+    <div class="draw-base">
+      <img id="drawBaseImg" alt="原图">
+      <div class="draw-layers" id="drawLayers"></div>
+    </div>
+    <canvas id="drawCanvas"></canvas>
+  </div>
+  <div class="draw-bar">
+    <span class="hint">直接在原画上画，保存后成为独立图层</span>
+    <span class="sep"></span>
+    <span class="hint">颜色</span>
+    <span id="swatches"></span>
+    <span class="sep"></span>
+    <span class="hint">粗细</span>
+    <input type="range" id="sizeRange" min="2" max="26" value="6" aria-label="画笔粗细">
+    <span class="hint" id="sizeVal">6</span>
+    <span class="sep"></span>
+    <button class="btn-ghost small" id="undoBtn" onclick="undoStroke()"><span class="ico" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0yMjQsMTI4YTk2LDk2LDAsMCwxLTk0LjcxLDk2SDEyOEE5NS4zOCw5NS4zOCwwLDAsMSw2Mi4xLDE5Ny44YTgsOCwwLDAsMSwxMS0xMS42M0E4MCw4MCwwLDEsMCw3MS40Myw3MS4zOWEzLjA3LDMuMDcsMCwwLDEtLjI2LjI1TDQ0LjU5LDk2SDcyYTgsOCwwLDAsMSwwLDE2SDI0YTgsOCwwLDAsMS04LThWNTZhOCw4LDAsMCwxLDE2LDBWODUuOEw2MC4yNSw2MEE5Niw5NiwwLDAsMSwyMjQsMTI4WiIvPjwvc3ZnPg==')"></span>撤销</button>
+    <button class="btn-ghost small" onclick="clearCanvas()">清空</button>
+    <button class="btn small" onclick="saveDoodle()"><span class="ico" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0yMjkuNjYsNzcuNjZsLTEyOCwxMjhhOCw4LDAsMCwxLTExLjMyLDBsLTU2LTU2YTgsOCwwLDAsMSwxMS4zMi0xMS4zMkw5NiwxODguNjksMjE4LjM0LDY2LjM0YTgsOCwwLDAsMSwxMS4zMiwxMS4zMloiLz48L3N2Zz4=')"></span>存为新图层</button>
+    <button class="btn-text" onclick="closeDraw()">取消</button>
+  </div>
+</div>
+
+<script src="assets/lib/gsap/gsap.min.js"></script>
+<script src="js/data.js"></script>
+<script src="js/common.js"></script>
+<script src="js/artwork.js"></script>
+</body>
+</html>
