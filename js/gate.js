@@ -127,12 +127,12 @@ function gateSubmit() {
     const name = document.getElementById('fName').value.trim();
     const pass2 = document.getElementById('fPass2').value;
     if (!name) return toast('起个昵称');
-    if (!pass || !pass2) return toast('密码随便填一个就行');
+    if (!pass || !pass2) return toast('请填写密码');
     if (pass !== pass2) return toast('两次密码不一样');
     setUser({ name, ts: today() });
     toast('注册成功，欢迎上墙');
   } else {
-    if (!pass) return toast('密码随便填一个就行');
+    if (!pass) return toast('请填写密码');
     const name = document.getElementById('fName').value.trim();
     setUser({ name: name || '神秘涂鸦客', ts: today() });
     toast('欢迎回来');
