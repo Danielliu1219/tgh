@@ -246,12 +246,13 @@
   position: fixed; inset: 0; z-index: 120; display: none;
   background: rgba(20, 16, 33, .82);
   -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
-  align-items: center; justify-content: center; flex-direction: column; gap: 18px;
-  padding: 20px;
+  align-items: center; justify-content: flex-start; flex-direction: column; gap: 18px;
+  padding: 20px; overflow-y: auto;
 }
 .draw-overlay.open { display: flex; }
+/* margin-top/bottom:auto 组合：内容放得下时整体居中，放不下时可滚动到全部 */
 .draw-box {
-  position: relative;
+  position: relative; flex: none; margin-top: auto;
   border: 1px solid var(--line-strong); border-radius: 8px;
   box-shadow: var(--shadow-soft); overflow: hidden;
 }
@@ -262,21 +263,87 @@
   display: block; cursor: crosshair; touch-action: none;
   background: transparent;
 }
+/* 笔尖指示环：跟着指针走，显示当前粗细 */
+.brush-cursor {
+  position: absolute; pointer-events: none; z-index: 3;
+  border: 2px solid rgba(243, 209, 202, .92); border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1.5px rgba(23, 19, 39, .55), inset 0 0 0 1.5px rgba(23, 19, 39, .4);
+}
+.brush-cursor.erase { border-style: dashed; }
+
 .draw-bar {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px;
-  padding: 13px 18px;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 12px;
+  max-width: min(980px, 96vw); margin-bottom: auto;
+  padding: 12px 16px;
   background: rgba(33, 25, 79, .94); border: 1px solid var(--line-strong);
   border-radius: 4px; box-shadow: var(--shadow-soft);
 }
 .draw-bar .sep { width: 1px; height: 20px; background: var(--line-strong); }
+.draw-bar .hint { font-size: 12.5px; color: var(--cream-dim); }
+.db-group { display: flex; align-items: center; gap: 8px; }
+.pal-wrap { position: relative; }
+.draw-bar .btn-ghost:disabled { opacity: .35; cursor: default; }
+.ico.flip { transform: scaleX(-1); }
+
+/* 画笔种类 chips */
+.brush-chip {
+  background: none; border: 1px solid var(--line-strong); border-radius: 4px;
+  color: var(--cream-dim); font-size: 12.5px; padding: 5px 10px; line-height: 1;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.brush-chip:hover { border-color: var(--amber); color: var(--cream); }
+.brush-chip.on { border-color: var(--amber); color: var(--cream); background: rgba(232, 46, 79, .16); }
+
+/* 颜色按钮 + 大色板弹层 */
+.color-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: none; border: 1px solid var(--line-strong); border-radius: 4px;
+  color: var(--cream); font-size: 12.5px; padding: 4px 10px; line-height: 1;
+}
+.color-btn:hover { border-color: var(--amber); }
+.color-dot {
+  width: 18px; height: 18px; border-radius: 4px; display: inline-block;
+  border: 1px solid rgba(243, 209, 202, .55); background: #E82E4F;
+}
+.palette-pop {
+  position: absolute; bottom: calc(100% + 12px); left: 50%; transform: translateX(-50%);
+  width: min(344px, 84vw); z-index: 40; padding: 14px;
+  background: rgba(28, 22, 51, .98); border: 1px solid var(--line-strong);
+  border-radius: 8px; box-shadow: var(--shadow-soft);
+}
+.palette-pop[hidden] { display: none; }
+.pal-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 7px; }
 .swatch {
   width: 24px; height: 24px; border-radius: 4px; border: 2px solid rgba(154, 127, 188, .5);
   transition: transform .15s;
 }
-.swatch:hover { transform: scale(1.2); }
+.pal-grid .swatch { width: 100%; height: 24px; }
+.swatch:hover { transform: scale(1.15); }
 .swatch.on { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(232, 46, 79, .35); }
-.draw-bar input[type="range"] { width: 100px; accent-color: var(--amber); }
-.draw-bar .hint { font-size: 12.5px; color: var(--cream-dim); }
+.pal-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
+.pal-custom {
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  font-size: 12.5px; color: var(--cream-dim);
+}
+.pal-custom:hover { color: var(--cream); }
+.pal-custom input[type="color"] {
+  width: 34px; height: 24px; padding: 0; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: 4px; background: none;
+}
+.pal-cur {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; color: var(--cream-dim); font-family: var(--font-en);
+}
+.pal-cur .color-dot { width: 16px; height: 16px; }
+
+/* 粗细滑杆 + 笔头预览 */
+.draw-bar input[type="range"] { width: 96px; accent-color: var(--amber); }
+.draw-bar .num { font-family: var(--font-en); min-width: 16px; text-align: center; }
+.brush-dot {
+  flex: none; width: 10px; height: 10px; border-radius: 50%;
+  background: #E82E4F; display: inline-block;
+}
 </style>
 </head>
 <body>
@@ -362,19 +429,37 @@
       <div class="draw-layers" id="drawLayers"></div>
     </div>
     <canvas id="drawCanvas"></canvas>
+    <div class="brush-cursor" id="brushCursor" hidden></div>
   </div>
   <div class="draw-bar">
     <span class="hint">直接在原画上画，保存后成为独立图层</span>
     <span class="sep"></span>
-    <span class="hint">颜色</span>
-    <span id="swatches"></span>
+    <div class="db-group" id="brushRow" role="group" aria-label="画笔种类"></div>
     <span class="sep"></span>
-    <span class="hint">粗细</span>
-    <input type="range" id="sizeRange" min="2" max="26" value="6" aria-label="画笔粗细">
-    <span class="hint" id="sizeVal">6</span>
+    <div class="db-group pal-wrap">
+      <button class="color-btn" id="colorBtn" aria-haspopup="true" aria-expanded="false" title="选颜色（含自定义）">
+        <i class="color-dot" id="colorDot"></i>颜色
+      </button>
+      <div class="palette-pop" id="palettePop" hidden>
+        <div class="pal-grid" id="palGrid"></div>
+        <div class="pal-foot">
+          <label class="pal-custom" title="自定义颜色">自定义<input type="color" id="customColor" value="#E82E4F"></label>
+          <span class="pal-cur"><i class="color-dot" id="palCurDot"></i><span id="palCurHex">#E82E4F</span></span>
+        </div>
+      </div>
+    </div>
     <span class="sep"></span>
-    <button class="btn-ghost small" id="undoBtn" onclick="undoStroke()"><span class="ico" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0yMjQsMTI4YTk2LDk2LDAsMCwxLTk0LjcxLDk2SDEyOEE5NS4zOCw5NS4zOCwwLDAsMSw2Mi4xLDE5Ny44YTgsOCwwLDAsMSwxMS0xMS42M0E4MCw4MCwwLDEsMCw3MS40Myw3MS4zOWEzLjA3LDMuMDcsMCwwLDEtLjI2LjI1TDQ0LjU5LDk2SDcyYTgsOCwwLDAsMSwwLDE2SDI0YTgsOCwwLDAsMS04LThWNTZhOCw4LDAsMCwxLDE2LDBWODUuOEw2MC4yNSw2MEE5Niw5NiwwLDAsMSwyMjQsMTI4WiIvPjwvc3ZnPg==')"></span>撤销</button>
-    <button class="btn-ghost small" onclick="clearCanvas()">清空</button>
+    <div class="db-group">
+      <span class="hint">粗细</span>
+      <input type="range" id="sizeRange" min="1" max="48" value="6" aria-label="画笔粗细">
+      <span class="hint num" id="sizeVal">6</span>
+      <span class="brush-dot" id="brushDot" aria-hidden="true"></span>
+    </div>
+    <span class="sep"></span>
+    <button class="btn-ghost small" id="undoBtn" onclick="undoStroke()" title="撤销（Ctrl+Z）"><span class="ico" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0yMjQsMTI4YTk2LDk2LDAsMCwxLTk0LjcxLDk2SDEyOEE5NS4zOCw5NS4zOCwwLDAsMSw2Mi4xLDE5Ny44YTgsOCwwLDAsMSwxMS0xMS42M0E4MCw4MCwwLDEsMCw3MS40Myw3MS4zOWEzLjA3LDMuMDcsMCwwLDEtLjI2LjI1TDQ0LjU5LDk2SDcyYTgsOCwwLDAsMSwwLDE2SDI0YTgsOCwwLDAsMS04LThWNTZhOCw4LDAsMCwxLDE2LDBWODUuOEw2MC4yNSw2MEE5Niw5NiwwLDAsMSwyMjQsMTI4WiIvPjwvc3ZnPg==')"></span>撤销</button>
+    <button class="btn-ghost small" id="redoBtn" onclick="redoStroke()" title="重做（Ctrl+Shift+Z）"><span class="ico flip" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0yMjQsMTI4YTk2LDk2LDAsMCwxLTk0LjcxLDk2SDEyOEE5NS4zOCw5NS4zOCwwLDAsMSw2Mi4xLDE5Ny44YTgsOCwwLDAsMSwxMS0xMS42M0E4MCw4MCwwLDEsMCw3MS40Myw3MS4zOWEzLjA3LDMuMDcsMCwwLDEtLjI2LjI1TDQ0LjU5LDk2SDcyYTgsOCwwLDAsMSwwLDE2SDI0YTgsOCwwLDAsMS04LThWNTZhOCw4LDAsMCwxLDE2LDBWODUuOEw2MC4yNSw2MEE5Niw5NiwwLDAsMSwyMjQsMTI4WiIvPjwvc3ZnPg==')"></span>重做</button>
+    <button class="btn-ghost small" onclick="clearCanvas()" title="清空（可重做找回）">清空</button>
+    <span class="sep"></span>
     <button class="btn small" onclick="saveDoodle()"><span class="ico" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0yMjkuNjYsNzcuNjZsLTEyOCwxMjhhOCw4LDAsMCwxLTExLjMyLDBsLTU2LTU2YTgsOCwwLDAsMSwxMS4zMi0xMS4zMkw5NiwxODguNjksMjE4LjM0LDY2LjM0YTgsOCwwLDAsMSwxMS4zMiwxMS4zMloiLz48L3N2Zz4=')"></span>存为新图层</button>
     <button class="btn-text" onclick="closeDraw()">取消</button>
   </div>

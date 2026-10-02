@@ -28,19 +28,6 @@ function svgSun() {
 </svg>`;
 }
 
-function svgHeart() {
-  return `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 1133'>
-  <g transform='translate(0 230) rotate(-9 420 300)'>
-    <path d='M420 470 C420 380 340 330 265 360 C180 395 185 505 265 555 L420 660 L575 555 C655 505 660 395 575 360 C500 330 420 380 420 470 Z'
-      fill='#E82E4F' stroke='#171327' stroke-width='14'/>
-    <text x='420' y='790' font-family='KaiTi,STKaiti,serif' font-size='72' fill='#F3D1CA' stroke='#171327' stroke-width='3' text-anchor='middle' paint-order='stroke'>好看！</text>
-  </g>
-  <circle cx='140' cy='220' r='10' fill='#E82E4F' stroke='#171327' stroke-width='6'/>
-  <circle cx='660' cy='300' r='10' fill='#E82E4F' stroke='#171327' stroke-width='6'/>
-  <circle cx='600' cy='170' r='7' fill='#F3D1CA' stroke='#171327' stroke-width='5'/>
-</svg>`;
-}
-
 function svgStar() {
   return `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 450'>
   <g transform='rotate(-6 610 140)'>
@@ -98,7 +85,7 @@ const MATERIALS = [
 const SEED_WORKS = [
   { id: 'w101', src: 'assets/art/w101.jpg', title: '设计1', author: '朱涵书', cat: '手绘', set: 's1',
     tags: ['文创设计'], likes: 229, ratio: 0.7064, ts: '2026-07-01',
-    layers: [ { id: 'l1', author: '夜行猫', ts: '2026-09-19', svg: svgHeart(), visible: true, likes: 23, comments: [ { u: 'Momo', t: '这一笔加得妙', ts: '2026-09-19' } ] } ], comments: [ { u: '野火', t: '颜色太配了', ts: '2026-09-19' } ] },
+    layers: [], comments: [ { u: '野火', t: '颜色太配了', ts: '2026-09-19' } ] },
   { id: 'w102', src: 'assets/art/w102.jpg', title: '设计2', author: '朱涵书', cat: '手绘', set: 's1',
     tags: ['文创设计'], likes: 168, ratio: 0.7057, ts: '2026-09-21',
     layers: [], comments: [] },
@@ -763,9 +750,22 @@ function getWorks() {
     if (!worksCache || !Array.isArray(worksCache) || worksCache.length === 0) {
       worksCache = JSON.parse(JSON.stringify(SEED_WORKS)); // 深拷贝种子
       write(K.works, worksCache);
+    } else if (dropOldSampleLayer(worksCache)) {
+      write(K.works, worksCache);
     }
   }
   return worksCache;
+}
+/* 旧示例图层清理：w101 上预置的「好看！」爱心（2026-10-02 按要求删除），
+   已访问过的浏览器 localStorage 里还留着，读到就顺手清掉 */
+function dropOldSampleLayer(list) {
+  let changed = false;
+  list.forEach(w => {
+    if (!w.layers || !w.layers.length) return;
+    const keep = w.layers.filter(l => !(l.svg && l.svg.indexOf('好看') !== -1));
+    if (keep.length !== w.layers.length) { w.layers = keep; changed = true; }
+  });
+  return changed;
 }
 function saveWorks() { write(K.works, worksCache); }
 

@@ -318,8 +318,17 @@ function setCompare(on) {
 
 /* ---------- 键盘 / 点击翻页 ---------- */
 document.addEventListener('keydown', e => {
-  if (document.getElementById('drawOverlay').classList.contains('open')) {
-    if (e.key === 'Escape') closeDraw();
+  if (overlay.classList.contains('open')) {
+    if (e.key === 'Escape') {
+      if (!palPop.hidden) closePal(); else closeDraw();   /* Esc 先收色板，再退出画布 */
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+      e.preventDefault();
+      if (e.shiftKey) redoStroke(); else undoStroke();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redoStroke(); return; }
     return;
   }
   if (e.key === 'ArrowRight') flipNext();
@@ -346,28 +355,190 @@ if (!REDUCE && G) {
 
 /* ============================================================
    全屏涂鸦画布
+   原图打底 + 透明画布；7 种画笔（铅笔/马克笔/蜡笔/喷漆/荧光笔/星光/橡皮）、
+   40 色大色板 + 自定义取色、粗细滑杆（每支笔记住各自粗细）、撤销/重做；
+   颗粒类画笔用「种子随机」重放——撤销重做后的画面和画的时候逐点一致
    ============================================================ */
 const overlay = document.getElementById('drawOverlay');
 const canvas = document.getElementById('drawCanvas');
 const ctx = canvas.getContext('2d');
-let strokes = [];
-let pen = { color: '#E82E4F', size: 6, erase: false };
-let drawing = false, lastPt = null;
+const drawBox = document.getElementById('drawBox');
+const brushCursor = document.getElementById('brushCursor');
 
-const DOODLE_COLORS = ['#F3D1CA', '#E82E4F', '#A8507E', '#9A7FBC', '#6E5AA2', '#171327'];
+/* 已完成的笔画落在离屏画布上，正在画的一笔整体重放：
+   半透明画笔（马克笔/荧光笔）不会在笔段接缝处叠出深色斑点 */
+const off = document.createElement('canvas');
+const offCtx = off.getContext('2d');
+
+const BRUSHES = {
+  pencil:    { name: '铅笔',   size: 4 },
+  marker:    { name: '马克笔', size: 14 },
+  crayon:    { name: '蜡笔',   size: 12 },
+  spray:     { name: '喷漆',   size: 26 },
+  highlight: { name: '荧光笔', size: 24 },
+  sparkle:   { name: '星光',   size: 14 },
+  eraser:    { name: '橡皮',   size: 20 },
+};
+
+/* 大色板：灰阶 / 红粉 / 橙黄棕 / 绿青 / 蓝紫 五组（含 v5 主色） */
+const PALETTE = [
+  '#FFFFFF', '#F3D1CA', '#C9C0D4', '#8E86A3', '#4A4463', '#262040', '#171327', '#000000',
+  '#FFE3EA', '#FF9DB8', '#FF6FA5', '#E82E4F', '#C2183C', '#A8507E', '#7C1F3A', '#4E1122',
+  '#FFF3C4', '#FFE066', '#F5A93B', '#FF8B3D', '#E39B6B', '#B4744A', '#7A4A2B', '#4A2B14',
+  '#DCF7C4', '#9BE06E', '#46C168', '#1E9E6A', '#0E6E52', '#23E8FF', '#2BB3D9', '#14607F',
+  '#DCE4FF', '#9AB7FF', '#4C7DFF', '#2E4FE8', '#9A7FBC', '#6E5AA2', '#3A2F6E', '#221A45',
+];
+
+let strokes = [];              /* 已完成的笔画 */
+let history = [[]], hi = 0;    /* 撤销/重做快照：每落一笔存一张，空画布是第 0 张 */
+let curStroke = null;          /* 正在画的一笔 */
+let drawing = false;
+let brushSizes = {};           /* 每支笔记住自己的粗细 */
+let lastPaint = 'pencil';      /* 选了橡皮再点颜色时切回的笔 */
+let pen = { brush: 'pencil', color: '#E82E4F', size: BRUSHES.pencil.size };
+
+/* 种子随机（mulberry32）：同一笔重放多少次，颗粒落点都一样 */
+function seeded(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* 喷漆的一撮雾点 */
+function sprayDot(c, rnd, x, y, R, n) {
+  for (let k = 0; k < n; k++) {
+    const ang = rnd() * 6.28318, rr = Math.sqrt(rnd()) * R;
+    c.beginPath();
+    c.arc(x + Math.cos(ang) * rr, y + Math.sin(ang) * rr, .5 + rnd() * 1.5, 0, 7);
+    c.fill();
+  }
+}
+
+/* 把一笔画到任意 2D 上下文（离屏重建 / 实时重放 / 提交共用同一套画法） */
+function renderStroke(c, s) {
+  const pts = s.pts;
+  c.save();
+  if (s.brush === 'eraser') c.globalCompositeOperation = 'destination-out';
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+
+  if (s.brush === 'spray') {
+    /* 喷漆：沿笔迹甩出细雾点 */
+    const rnd = seeded(s.seed);
+    const R = Math.max(7, s.size * .85);
+    c.fillStyle = s.color;
+    c.globalAlpha = .2;
+    if (pts.length === 1) sprayDot(c, rnd, pts[0].x, pts[0].y, R, 34);
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      const d = Math.hypot(b.x - a.x, b.y - a.y);
+      const n = Math.max(2, Math.min(60, Math.round(d / 1.1) + 3));
+      for (let k = 0; k < n; k++) {
+        sprayDot(c, rnd, a.x + (b.x - a.x) * rnd(), a.y + (b.y - a.y) * rnd(), R, 1);
+      }
+    }
+  } else if (s.brush === 'crayon') {
+    /* 蜡笔：带缝隙的颗粒涂鸦 */
+    const rnd = seeded(s.seed);
+    const r0 = Math.max(1.6, s.size * .38);
+    c.fillStyle = s.color;
+    c.globalAlpha = .34;
+    if (pts.length === 1) {
+      for (let k = 0; k < 18; k++) {
+        const ang = rnd() * 6.28318, rr = Math.sqrt(rnd()) * s.size * .5;
+        c.beginPath(); c.arc(pts[0].x + Math.cos(ang) * rr, pts[0].y + Math.sin(ang) * rr, r0 * (.5 + rnd() * .6), 0, 7); c.fill();
+      }
+    }
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      const d = Math.hypot(b.x - a.x, b.y - a.y);
+      const n = Math.max(1, Math.min(500, Math.ceil(d / 1.2)));
+      for (let k = 0; k < n; k++) {
+        const u = rnd(), jx = (rnd() - .5) * s.size * .55, jy = (rnd() - .5) * s.size * .55;
+        const rad = r0 * (.4 + rnd() * .55), skip = rnd() < .18;
+        if (skip) continue;
+        c.beginPath(); c.arc(a.x + (b.x - a.x) * u + jx, a.y + (b.y - a.y) * u + jy, rad, 0, 7); c.fill();
+      }
+    }
+  } else if (s.brush === 'sparkle') {
+    /* 星光：沿笔迹撒四角小星星 */
+    const rnd = seeded(s.seed);
+    c.fillStyle = s.color;
+    const step = Math.max(9, s.size * 1.5);
+    const star = (x, y) => {
+      const L = s.size * (.55 + rnd() * .8), rot = rnd() * 6.28318, al = .6 + rnd() * .4;
+      const k = L * .2;
+      c.globalAlpha = al;
+      c.save();
+      c.translate(x, y);
+      c.rotate(rot);
+      c.beginPath();
+      c.moveTo(0, -L); c.lineTo(k, -k); c.lineTo(L, 0); c.lineTo(k, k);
+      c.lineTo(0, L); c.lineTo(-k, k); c.lineTo(-L, 0); c.lineTo(-k, -k);
+      c.closePath();
+      c.fill();
+      c.restore();
+    };
+    star(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      const d = Math.hypot(b.x - a.x, b.y - a.y);
+      const n = Math.max(1, Math.min(6, Math.round(d / step)));
+      for (let k = 1; k <= n; k++) {
+        const u = k / n;
+        star(a.x + (b.x - a.x) * u + (rnd() - .5) * step, a.y + (b.y - a.y) * u + (rnd() - .5) * step);
+      }
+    }
+  } else {
+    /* 铅笔 / 马克笔 / 荧光笔 / 橡皮：整条路径一次成笔（一笔之内自交处不叠色） */
+    c.globalAlpha = s.brush === 'marker' ? .5 : s.brush === 'highlight' ? .3 : 1;
+    c.strokeStyle = s.color;
+    c.fillStyle = s.color;
+    c.lineWidth = s.size;
+    if (pts.length === 1) {
+      c.beginPath(); c.arc(pts[0].x, pts[0].y, Math.max(1, s.size / 2), 0, 7); c.fill();
+    } else {
+      c.beginPath();
+      pts.forEach((p, i) => i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y));
+      c.stroke();
+    }
+  }
+  c.restore();
+}
+
+function drawLive() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(off, 0, 0);
+  if (curStroke) renderStroke(ctx, curStroke);
+}
+let liveRaf = 0;
+function scheduleLive() {
+  if (liveRaf) return;
+  liveRaf = requestAnimationFrame(() => { liveRaf = 0; drawLive(); });
+}
+function rebuild() {
+  offCtx.clearRect(0, 0, off.width, off.height);
+  strokes.forEach(s => renderStroke(offCtx, s));
+  drawLive();
+}
 
 function openDraw() {
   if (!getUser()) return mustLogin();
   const w = curWork();
   overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  closePal();
 
   /* 弹窗可用区域 → 按作品比例定尺寸 → 原图与透明画布同尺寸叠放 */
   const { w: dw, h: dh } = fitBox(w.ratio, window.innerWidth * 0.92, window.innerHeight * 0.7);
-  const box = document.getElementById('drawBox');
-  box.style.width = dw + 'px';
-  box.style.height = dh + 'px';
-  canvas.width = dw;
-  canvas.height = dh;
+  drawBox.style.width = dw + 'px';
+  drawBox.style.height = dh + 'px';
+  canvas.width = off.width = dw;
+  canvas.height = off.height = dh;
   canvas.style.width = dw + 'px';
   canvas.style.height = dh + 'px';
 
@@ -376,84 +547,198 @@ function openDraw() {
     .map(l => `<img src="${l.svg ? 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(l.svg) : l.dataUrl}" alt="">`).join('');
 
   strokes = [];
-  redraw();
-  document.body.style.overflow = 'hidden';
+  history = [[]]; hi = 0;
+  curStroke = null; drawing = false;
+  brushCursor.hidden = true;
+  syncUndoUI();
+  rebuild();
 }
 function closeDraw() {
   overlay.classList.remove('open');
   document.body.style.overflow = '';
-}
-function redraw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  strokes.forEach(s => {
-    ctx.globalCompositeOperation = s.erase ? 'destination-out' : 'source-over';
-    ctx.strokeStyle = s.color;
-    ctx.lineWidth = s.size;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    s.pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
-    ctx.stroke();
-  });
-  ctx.globalCompositeOperation = 'source-over';
+  closePal();
+  brushCursor.hidden = true;
 }
 
+/* ---------- 指针事件：画 + 笔尖指示环 ---------- */
+function evPt(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * (canvas.width / r.width), y: (e.clientY - r.top) * (canvas.height / r.height) };
+}
+function moveCursor(e) {
+  const p = evPt(e);
+  const d = Math.max(6, pen.size);
+  brushCursor.style.width = d + 'px';
+  brushCursor.style.height = d + 'px';
+  brushCursor.style.left = p.x + 'px';
+  brushCursor.style.top = p.y + 'px';
+  brushCursor.hidden = false;
+  brushCursor.classList.toggle('erase', pen.brush === 'eraser');
+}
 canvas.addEventListener('pointerdown', e => {
-  drawing = true;
-  lastPt = { x: e.offsetX, y: e.offsetY };
-  strokes.push({ ...pen, pts: [lastPt] });
+  if (curStroke) return;
+  e.preventDefault();
   canvas.setPointerCapture(e.pointerId);
+  drawing = true;
+  curStroke = { brush: pen.brush, color: pen.color, size: pen.size, seed: (Math.random() * 2147483647) | 0, pts: [evPt(e)] };
+  scheduleLive();
 });
 canvas.addEventListener('pointermove', e => {
-  if (!drawing) return;
-  const p = { x: e.offsetX, y: e.offsetY };
-  strokes[strokes.length - 1].pts.push(p);
-  ctx.globalCompositeOperation = pen.erase ? 'destination-out' : 'source-over';
-  ctx.strokeStyle = pen.color;
-  ctx.lineWidth = pen.size;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(lastPt.x, lastPt.y);
-  ctx.lineTo(p.x, p.y);
-  ctx.stroke();
-  lastPt = p;
+  moveCursor(e);
+  if (!drawing || !curStroke) return;
+  curStroke.pts.push(evPt(e));
+  scheduleLive();
 });
-canvas.addEventListener('pointerup', () => { drawing = false; });
+function endStroke(e) {
+  if (!drawing || !curStroke) return;
+  drawing = false;
+  strokes.push(curStroke);
+  renderStroke(offCtx, curStroke);
+  curStroke = null;
+  pushHistory();
+  drawLive();
+  const r = canvas.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) brushCursor.hidden = true;
+}
+canvas.addEventListener('pointerup', endStroke);
+canvas.addEventListener('pointercancel', endStroke);
+canvas.addEventListener('pointerleave', () => { if (!drawing) brushCursor.hidden = true; });
 
-(function () {
-  const box = document.getElementById('swatches');
-  box.innerHTML = DOODLE_COLORS.map(c =>
-    `<button class="swatch ${c === pen.color ? 'on' : ''}" style="background:${c}" data-c="${c}" aria-label="颜色"></button>`).join('');
-  box.addEventListener('click', e => {
-    const b = e.target.closest('.swatch');
-    if (!b) return;
-    pen.color = b.dataset.c;
-    pen.erase = false;
-    box.querySelectorAll('.swatch').forEach(s => s.classList.toggle('on', s === b));
-    document.getElementById('undoBtn').textContent = '撤销';
-  });
-  const range = document.getElementById('sizeRange');
-  const sizeVal = document.getElementById('sizeVal');
-  range.addEventListener('input', () => {
-    pen.size = +range.value;
-    sizeVal.textContent = range.value;
-  });
-  /* 橡皮擦 = 撤销按钮临时切换 */
-  canvas.addEventListener('contextmenu', e => {
-    e.preventDefault();
-    pen.erase = true;
-    document.getElementById('undoBtn').textContent = '橡皮';
-  });
-})();
-
+/* ---------- 撤销 / 重做 / 清空 ---------- */
+const undoBtn = document.getElementById('undoBtn');
+const redoBtn = document.getElementById('redoBtn');
+function syncUndoUI() {
+  undoBtn.disabled = hi <= 0;
+  redoBtn.disabled = hi >= history.length - 1;
+}
+function pushHistory() {
+  history = history.slice(0, hi + 1);
+  history.push(strokes.slice());
+  if (history.length > 60) history.shift();
+  hi = history.length - 1;
+  syncUndoUI();
+}
 function undoStroke() {
-  strokes.pop();
-  redraw();
+  if (drawing || hi <= 0) return;
+  hi--;
+  strokes = history[hi].slice();
+  rebuild(); syncUndoUI();
+}
+function redoStroke() {
+  if (drawing || hi >= history.length - 1) return;
+  hi++;
+  strokes = history[hi].slice();
+  rebuild(); syncUndoUI();
 }
 function clearCanvas() {
+  if (drawing || !strokes.length) return;
   strokes = [];
-  redraw();
+  pushHistory();     /* 清空也进历史，撤销/重做能找回来 */
+  rebuild();
 }
+
+/* ---------- 画笔 / 色板 / 粗细 工具栏 ---------- */
+const brushRow = document.getElementById('brushRow');
+const colorBtn = document.getElementById('colorBtn');
+const colorDot = document.getElementById('colorDot');
+const palPop = document.getElementById('palettePop');
+const palCurDot = document.getElementById('palCurDot');
+const palCurHex = document.getElementById('palCurHex');
+const customColor = document.getElementById('customColor');
+const sizeRange = document.getElementById('sizeRange');
+const sizeVal = document.getElementById('sizeVal');
+const brushDot = document.getElementById('brushDot');
+
+function openPal() {
+  palPop.hidden = false;
+  colorBtn.setAttribute('aria-expanded', 'true');
+  /* 默认以颜色按钮为中心展开；手机窄屏上往屏内收边，别探出屏幕 */
+  const wrap = colorBtn.closest('.pal-wrap').getBoundingClientRect();
+  const pw = palPop.offsetWidth;
+  const cx = wrap.left + wrap.width / 2;
+  const left = Math.min(Math.max(cx - pw / 2, 8), Math.max(8, window.innerWidth - pw - 8));
+  palPop.style.left = (left - wrap.left) + 'px';
+  palPop.style.transform = 'none';
+}
+function closePal() {
+  palPop.hidden = true;
+  colorBtn.setAttribute('aria-expanded', 'false');
+  palPop.style.left = '50%';
+  palPop.style.transform = 'translateX(-50%)';
+}
+
+function setColor(c) {
+  pen.color = c;
+  colorDot.style.background = c;
+  palCurDot.style.background = c;
+  palCurHex.textContent = String(c).toUpperCase();
+  if (/^#[0-9a-f]{6}$/i.test(c)) customColor.value = c;
+  document.querySelectorAll('#palGrid .swatch').forEach(s => s.classList.toggle('on', s.dataset.c === c));
+  if (pen.brush === 'eraser') selectBrush(lastPaint);   /* 点颜色即从橡皮切回画笔 */
+  updateBrushDot();
+}
+function updateBrushDot() {
+  const d = Math.max(5, Math.min(38, pen.size));
+  brushDot.style.width = d + 'px';
+  brushDot.style.height = d + 'px';
+  brushDot.style.border = 'none';
+  brushDot.style.opacity = '1';
+  if (pen.brush === 'eraser') {
+    brushDot.style.background = 'transparent';
+    brushDot.style.border = '2px solid #9A7FBC';
+  } else if (pen.brush === 'spray') {
+    brushDot.style.background = `radial-gradient(circle, ${pen.color}, transparent 70%)`;
+  } else if (pen.brush === 'highlight') {
+    brushDot.style.background = pen.color;
+    brushDot.style.opacity = '.45';
+  } else if (pen.brush === 'marker') {
+    brushDot.style.background = pen.color;
+    brushDot.style.opacity = '.6';
+  } else {
+    brushDot.style.background = pen.color;
+  }
+}
+function selectBrush(key) {
+  if (pen.brush === key) return;
+  brushSizes[pen.brush] = pen.size;       /* 记住这支笔自己的粗细 */
+  pen.brush = key;
+  if (key !== 'eraser') lastPaint = key;
+  pen.size = brushSizes[key] || BRUSHES[key].size;
+  sizeRange.value = pen.size;
+  sizeVal.textContent = pen.size;
+  document.querySelectorAll('#brushRow .brush-chip').forEach(c => c.classList.toggle('on', c.dataset.brush === key));
+  if (key === 'eraser') closePal();
+  updateBrushDot();
+}
+
+brushRow.innerHTML = Object.keys(BRUSHES).map(k =>
+  `<button class="brush-chip ${k === pen.brush ? 'on' : ''}" data-brush="${k}" title="${BRUSHES[k].name}">${BRUSHES[k].name}</button>`).join('');
+brushRow.addEventListener('click', e => {
+  const b = e.target.closest('.brush-chip');
+  if (b) selectBrush(b.dataset.brush);
+});
+document.getElementById('palGrid').innerHTML = PALETTE.map(c =>
+  `<button class="swatch ${c === pen.color ? 'on' : ''}" style="background:${c}" data-c="${c}" aria-label="${c}" title="${c}"></button>`).join('');
+document.getElementById('palGrid').addEventListener('click', e => {
+  const b = e.target.closest('.swatch');
+  if (!b) return;
+  setColor(b.dataset.c);
+  closePal();
+});
+customColor.addEventListener('input', () => setColor(customColor.value));
+colorBtn.addEventListener('click', () => (palPop.hidden ? openPal() : closePal()));
+window.addEventListener('resize', () => closePal());   /* 尺寸变了先收起，下次展开重新收边 */
+overlay.addEventListener('pointerdown', e => {   /* 点画布等别处收起色板 */
+  if (!palPop.hidden && !e.target.closest('.pal-wrap')) closePal();
+});
+sizeRange.addEventListener('input', () => {
+  pen.size = +sizeRange.value;
+  brushSizes[pen.brush] = pen.size;
+  sizeVal.textContent = sizeRange.value;
+  updateBrushDot();
+});
+updateBrushDot();
+
 function saveDoodle() {
   if (!strokes.length) return toast('先画几笔');
   const w = curWork();
