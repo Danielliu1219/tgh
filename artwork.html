@@ -183,6 +183,10 @@
 .art-author .who { font-size: 14.5px; color: var(--cream); font-weight: 700; }
 .art-author .when { font-size: 12px; color: var(--cream-dim); }
 .art-note { font-size: 12.5px; color: var(--cream-dim); margin-top: 12px; }
+/* 自己发布的作品：删除入口（两段式确认） */
+.own-row { display: flex; margin-top: 12px; }
+.own-row[hidden] { display: none; }
+.btn-ghost.danger, .btn-ghost.danger:hover { color: var(--heart); border-color: rgba(232, 46, 79, .65); }
 
 .art-actions { display: flex; gap: 12px; margin: 16px 0; }
 .big-action {
@@ -215,6 +219,7 @@
 .layer-row .lr-btn { background: none; border: 0; color: var(--cream-dim); font-size: 12.5px; padding: 3px 6px; }
 .layer-row .lr-btn:hover { color: var(--amber); }
 .layer-row .lr-btn.liked { color: var(--heart); }
+.layer-row .lr-btn.armed { color: var(--heart); }
 .layer-cmts { margin-top: 9px; border-top: 1px dashed var(--line); padding-top: 9px; display: none; }
 .layer-cmts.open { display: block; }
 .layer-cmts .c-item { font-size: 13px; margin: 4px 0; color: var(--cream-dim); }
@@ -398,6 +403,9 @@
           <button class="btn small" onclick="openDraw()">
             <span class="ico" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0yMzIsMzJhOCw4LDAsMCwwLTgtOGMtNDQuMDgsMC04OS4zMSw0OS43MS0xMTQuNDMsODIuNjNBNjAsNjAsMCwwLDAsMzIsMTY0YzAsMzAuODgtMTkuNTQsNDQuNzMtMjAuNDcsNDUuMzdBOCw4LDAsMCwwLDE2LDIyNEg5MmE2MCw2MCwwLDAsMCw1Ny4zNy03Ny41N0MxODIuMywxMjEuMzEsMjMyLDc2LjA4LDIzMiwzMlpNOTIsMjA4SDM0LjYzQzQxLjM4LDE5OC40MSw0OCwxODMuOTIsNDgsMTY0YTQ0LDQ0LDAsMSwxLDQ0LDQ0Wm0zMi40Mi05NC40NXE1LjE0LTYuNjYsMTAuMDktMTIuNTVBNzYuMjMsNzYuMjMsMCwwLDEsMTU1LDEyMS40OXEtNS45LDQuOTQtMTIuNTUsMTAuMDlBNjAuNTQsNjAuNTQsMCwwLDAsMTI0LjQyLDExMy41NVptNDIuNy0yLjY4YTkyLjU3LDkyLjU3LDAsMCwwLTIyLTIyYzMxLjc4LTM0LjUzLDU1Ljc1LTQ1LDY5LjktNDcuOTFDMjEyLjE3LDU1LjEyLDIwMS42NSw3OS4wOSwxNjcuMTIsMTEwLjg3WiIvPjwvc3ZnPg==')"></span>画一笔
           </button>
+        </div>
+        <div class="own-row" id="ownRow" hidden>
+          <button class="btn-ghost small" id="delWorkBtn" title="删除后无法恢复" onclick="askDelWork(this)">删除这幅作品</button>
         </div>
         <p class="art-note">本作品开放共享与二创。你的每一笔都是独立图层，原作品完整保留、署名清晰。</p>
       </div>

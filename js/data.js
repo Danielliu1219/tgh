@@ -847,6 +847,24 @@ function toggleLayerVisible(workId, layerId) {
   if (l) { l.visible = !l.visible; saveWorks(); }
   return l;
 }
+/* 图层删除：只能删「自己画的」——本机画笔画出来的层（dataUrl）或作者名对得上的层；
+   预置示例图层是别人的二创，不给删 */
+function canRemoveLayer(l) {
+  if (!l) return false;
+  if (l.dataUrl) return true;
+  const u = getUser();
+  return !!(u && l.author === u.name);
+}
+function removeLayer(workId, layerId) {
+  const w = getWork(workId);
+  if (!w) return null;
+  const l = w.layers.find(x => x.id === layerId);
+  if (!l || !canRemoveLayer(l)) return null;
+  w.layers = w.layers.filter(x => x.id !== layerId);
+  saveWorks();
+  dropLayerLike(layerId);
+  return l;
+}
 function toggleLayerLike(workId, layerId) {
   const key = 'tgh_layerlikes_' + DATA_VER;
   const map = read(key, {});
@@ -856,6 +874,11 @@ function toggleLayerLike(workId, layerId) {
 }
 function isLayerLiked(layerId) {
   return !!read('tgh_layerlikes_' + DATA_VER, {})[layerId];
+}
+function dropLayerLike(layerId) {
+  const key = 'tgh_layerlikes_' + DATA_VER;
+  const map = read(key, {});
+  if (layerId in map) { delete map[layerId]; write(key, map); }
 }
 function layerLikeCount(w, l) { return l.likes + (isLayerLiked(l.id) ? 1 : 0); }
 
@@ -881,6 +904,24 @@ function addWork(work) {
   getWorks().unshift(work);
   saveWorks();
   return work;
+}
+
+/* 删除自己发布的作品（u 开头）：收藏、点赞、拼贴画布里的引用一并清掉 */
+function removeWork(id) {
+  const list = getWorks();
+  const i = list.findIndex(w => w.id === id);
+  if (i === -1 || !isUserWork(list[i])) return false;
+  const w = list.splice(i, 1)[0];
+  saveWorks();
+  write(K.likes, read(K.likes, []).filter(x => x !== id));
+  write(K.favs, read(K.favs, []).filter(x => x !== id));
+  const col = getCollage();
+  if (col.items.some(it => it.id === id)) {
+    col.items = col.items.filter(it => it.id !== id);
+    saveCollage(col);
+  }
+  (w.layers || []).forEach(l => dropLayerLike(l.id));
+  return true;
 }
 
 /* 用户 */

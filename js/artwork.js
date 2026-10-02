@@ -199,8 +199,31 @@ function renderPanel(w) {
   document.getElementById('favIcon').style.setProperty('--ico', `url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0xODQsMzJINzJBMTYsMTYsMCwwLDAsNTYsNDhWMjI0YTgsOCwwLDAsMCwxMi4yNCw2Ljc4TDEyOCwxOTMuNDNsNTkuNzcsMzcuMzVBOCw4LDAsMCwwLDIwMCwyMjRWNDhBMTYsMTYsMCwwLDAsMTg0LDMyWm0wLDE3Ny41Ny01MS43Ny0zMi4zNWE4LDgsMCwwLDAtOC40OCwwTDcyLDIwOS41N1Y0OEgxODRaIi8+PC9zdmc+')`);
   document.getElementById('favText').textContent = fav ? '已收藏' : '收藏';
 
+  /* 删除入口只给自己发布的作品（示例/他人作品不可删） */
+  const ownRow = document.getElementById('ownRow');
+  ownRow.hidden = !isUserWork(w);
+  const delBtn = document.getElementById('delWorkBtn');
+  delBtn.textContent = '删除这幅作品';
+  delBtn.classList.remove('danger');
+  delete delBtn.dataset.arm;
+
   renderLayers(w);
   renderComments(w);
+}
+
+/* 删除自己发布的作品：两段式确认；删完回「大家的新作」，最后一幅删掉就回画廊 */
+function askDelWork(btn) {
+  if (!btn.dataset.arm) {
+    btn.dataset.arm = '1';
+    btn.textContent = '确认删除？';
+    btn.classList.add('danger');
+    return;
+  }
+  if (!removeWork(curWork().id)) return;
+  toast('已删除这幅作品');
+  setTimeout(() => {
+    location.href = worksOfSet('new').length ? 'set.html?id=new' : 'gallery.html';
+  }, 700);
 }
 
 function renderLayers(w) {
@@ -211,6 +234,8 @@ function renderLayers(w) {
   }
   box.innerHTML = w.layers.map(l => {
     const off = !l.visible;
+    const del = canRemoveLayer(l)
+      ? `<button class="lr-btn lr-del" onclick="askDelLayer('${l.id}', this)">删除</button>` : '';
     return `
     <div class="layer-row ${off ? 'off' : ''}">
       <div class="lr-top">
@@ -221,6 +246,7 @@ function renderLayers(w) {
         <span class="lr-when">${timeAgo(l.ts)}</span>
         <button class="lr-btn ${isLayerLiked(l.id) ? 'liked' : ''}" onclick="likeLayer('${l.id}')">❤ ${layerLikeCount(w, l)}</button>
         <button class="lr-btn" onclick="toggleLayerCmts('${l.id}')">批注</button>
+        ${del}
       </div>
       <div class="layer-cmts" id="lcmts-${l.id}">
         ${l.comments.map(c => `<div class="c-item"><b>${esc(c.u)}</b>：${esc(c.t)}</div>`).join('')}
@@ -266,6 +292,19 @@ function sendLayerComment(id) {
   addLayerComment(curWork().id, id, text, getUser().name);
   input.value = '';
   renderLayers(curWork());
+}
+/* 删除自己画的图层：两段式确认，书页上的图层同步消失 */
+function askDelLayer(id, btn) {
+  if (!btn.dataset.arm) {
+    btn.dataset.arm = '1';
+    btn.textContent = '确认删除？';
+    btn.classList.add('armed');
+    return;
+  }
+  if (!removeLayer(curWork().id, id)) return;
+  syncPageLayers();
+  renderLayers(curWork());
+  toast('已删除这一层');
 }
 function doLike(e) {
   if (!getUser()) return mustLogin();
