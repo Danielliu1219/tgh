@@ -1,5 +1,5 @@
 /* ============================================================
-   作品页：3D 书本翻页浏览「这一集」的全部作品 + 图层/点赞/收藏/批注/涂鸦
+   作品页：3D 书本翻页浏览「这一集」的全部作品 + 图层/点赞/收藏/评论/涂鸦
    书页 = 封面 + 每幅作品一张纸；翻页走 GSAP rotateY 折页
    一本书 = 一个作品集（打开的是当前作品所在的那一集）
    ============================================================ */
@@ -170,12 +170,19 @@ function initBook() {
 /* ---------- 当前页信息 ---------- */
 function curWork() { return SET_WORKS[cur - 1]; }
 
+/* 顶栏一行小字：分类 · 点赞（含本机点的那一下）· 评论数 · 进度 */
+function syncMeta() {
+  const w = curWork();
+  if (!w) return;
+  document.getElementById('curMeta').textContent =
+    `${w.cat} · ❤ ${w.likes + (isLiked(w.id) ? 1 : 0)} · 💬 ${w.comments.length} · 第 ${cur} / ${N} 幅`;
+}
+
 function refreshUI() {
   const w = curWork();
   document.getElementById('curTitle').textContent =
     w ? (w.title === '未上传' ? setName + ' · 第 ' + cur + ' 幅' : w.title) : '';
-  document.getElementById('curMeta').textContent =
-    w ? `${w.cat} · ❤ ${w.likes} · 第 ${cur} / ${N} 幅` : '';
+  syncMeta();
   document.getElementById('btnPrev').disabled = cur <= 1;
   document.getElementById('btnNext').disabled = cur >= N;
   document.querySelectorAll('#bookStrip button').forEach(b => b.classList.toggle('on', +b.dataset.i === cur));
@@ -259,10 +266,42 @@ function renderLayers(w) {
   }).join('');
 }
 
+/* 评论：头像 + 昵称 + 时间 + 点赞/回复 + 删除（只有自己发的能删，两段式确认） */
+const AVATAR_COLORS = ['#E82E4F', '#9A7FBC', '#A8507E', '#E39B6B', '#8E86A3', '#C9C0D4'];
+function avatarColor(name) { return AVATAR_COLORS[hashStr(String(name)) % AVATAR_COLORS.length]; }
+/* 把 @某某 点亮（在转义之后做，只影响样式） */
+function hlMentions(safeText) {
+  return safeText.replace(/@([^\s@：，。！？]+)/g, '<span class="at">@$1</span>');
+}
 function renderComments(w) {
-  document.getElementById('commentList').innerHTML = w.comments.length
-    ? w.comments.map(c => `<div class="c-item"><b>${esc(c.u)}</b><div class="ct">${esc(c.t)}</div><div class="when">${timeAgo(c.ts)}</div></div>`).join('')
-    : '<div class="layer-empty">还没有批注，说点什么。</div>';
+  const box = document.getElementById('commentList');
+  const cnt = document.getElementById('commentCount');
+  if (cnt) cnt.textContent = w.comments.length;
+  const list = w.comments.slice().sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
+  if (!list.length) {
+    box.innerHTML = '<div class="layer-empty">还没有评论，来抢沙发。</div>';
+    return;
+  }
+  const me = getUser();
+  box.innerHTML = list.map(c => {
+    const mine = me && canRemoveComment(c);
+    const lk = commentLikeCount(c);
+    return `
+    <div class="cmt">
+      <span class="cmt-av" style="--av:${avatarColor(c.u)}">${esc(String(c.u).charAt(0))}</span>
+      <div class="cmt-main">
+        <div class="cmt-head">
+          <b>${esc(c.u)}</b><span class="cmt-when">${timeAgo(c.ts)}</span>
+          ${mine ? `<button class="cmt-del" data-id="${c.id}" onclick="askDelComment(this)">删除</button>` : ''}
+        </div>
+        <div class="cmt-t">${hlMentions(esc(c.t))}</div>
+        <div class="cmt-acts">
+          <button class="cmt-like ${isCommentLiked(c.id) ? 'liked' : ''}" onclick="likeComment('${c.id}', event)">❤ ${lk}</button>
+          <button class="cmt-reply" data-name="${esc(c.u)}" onclick="replyComment(this)">回复</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 /* ---------- 面板互动 ---------- */
@@ -286,6 +325,7 @@ function toggleLayerCmts(id) {
   document.getElementById('lcmts-' + id).classList.toggle('open');
 }
 function sendLayerComment(id) {
+  if (!getUser()) return mustLogin('给这层写批注');
   const input = document.getElementById('lcin-' + id);
   const text = input.value.trim();
   if (!text) return toast('写点内容再发');
@@ -307,16 +347,16 @@ function askDelLayer(id, btn) {
   toast('已删除这一层');
 }
 function doLike(e) {
-  if (!getUser()) return mustLogin();
+  if (!getUser()) return mustLogin('点赞');
   const w = curWork();
   const r = toggleLike(w.id);
   document.getElementById('likeCount').textContent = r.count;
   document.getElementById('likeBtn').classList.toggle('liked', r.liked);
   if (r.liked) heartBurst(e.clientX, e.clientY);
-  document.getElementById('curMeta').textContent = `${w.cat} · ❤ ${w.likes}`;
+  syncMeta();
 }
 function doFav() {
-  if (!getUser()) return mustLogin();
+  if (!getUser()) return mustLogin('收藏');
   const w = curWork();
   const r = toggleFav(w.id);
   document.getElementById('favBtn').classList.toggle('liked', r.fav);
@@ -324,13 +364,40 @@ function doFav() {
   toast(r.fav ? '已加入收藏' : '已取消收藏');
 }
 function sendComment() {
-  if (!getUser()) return mustLogin();
+  if (!getUser()) return mustLogin('发评论');
   const input = document.getElementById('commentInput');
   const text = input.value.trim();
   if (!text) return toast('写点内容再发');
   addComment(curWork().id, text, getUser().name);
   input.value = '';
   renderComments(curWork());
+  syncMeta();
+}
+/* 给评论点赞：要登录，点了爆一颗心 */
+function likeComment(id, e) {
+  if (!getUser()) return mustLogin('给评论点赞');
+  const liked = toggleCommentLike(id);
+  if (liked && e) heartBurst(e.clientX, e.clientY);
+  renderComments(curWork());
+}
+/* 回复：把 @昵称 填进输入框 */
+function replyComment(btn) {
+  const input = document.getElementById('commentInput');
+  const pre = '@' + (btn.dataset.name || '') + ' ';
+  if (input.value.indexOf(pre) !== 0) input.value = pre + input.value;
+  input.focus();
+}
+/* 删除自己的评论：两段式确认 */
+function askDelComment(btn) {
+  if (!btn.dataset.arm) {
+    btn.dataset.arm = '1';
+    btn.textContent = '确认删除？';
+    btn.classList.add('armed');
+    return;
+  }
+  if (removeComment(curWork().id, btn.dataset.id)) toast('已删除这条评论');
+  renderComments(curWork());
+  syncMeta();
 }
 
 /* 按住看原图（隐藏所有图层） */
@@ -566,7 +633,7 @@ function rebuild() {
 }
 
 function openDraw() {
-  if (!getUser()) return mustLogin();
+  if (!getUser()) return mustLogin('涂鸦');
   const w = curWork();
   overlay.classList.add('open');
   document.body.style.overflow = 'hidden';

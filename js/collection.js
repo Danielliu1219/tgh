@@ -27,7 +27,7 @@ function renderFavList() {
         <div class="pic"><img src="${w.src}" alt="${esc(w.title)}" loading="lazy"></div>
         <div class="info">
           <div class="t">${esc(w.title)}</div>
-          <div class="meta">${esc(w.author)} · ❤ ${w.likes}</div>
+          <div class="meta">${esc(w.author)} · ❤ ${w.likes} · 💬 ${w.comments.length}</div>
         </div>
       </a>
       <div class="ops">

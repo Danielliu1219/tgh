@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>作品 · AI“涂鸦画廊”</title>
-<meta name="description" content="书本翻页浏览这一集的全部作品：在他人作品上新建图层涂鸦、开关图层、点赞收藏、写批注。">
+<meta name="description" content="书本翻页浏览这一集的全部作品：在他人作品上新建图层涂鸦、开关图层、点赞收藏、看评论写评论。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='4' fill='%23171327'/%3E%3Ccircle cx='32' cy='33' r='15' fill='%23E82E4F'/%3E%3Ccircle cx='17' cy='16' r='3.5' fill='%239A7FBC'/%3E%3Ccircle cx='48' cy='13' r='2.5' fill='%23F3D1CA'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="css/common.css">
 <style>
@@ -233,7 +233,40 @@
 .layer-cmts .c-add input:focus { border-color: var(--amber); outline: none; }
 .layer-empty { font-size: 13px; color: var(--cream-dim); padding: 4px 0; }
 
-/* 批注 */
+/* 评论（层内批注 .c-item 沿用原样式，两套互不干扰） */
+.cmt { display: flex; gap: 10px; padding: 11px 0; border-bottom: 1px dashed var(--line); }
+.cmt-av {
+  flex: none; width: 26px; height: 26px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--av, #9A7FBC); color: #171327;
+  font-size: 13px; font-weight: 800; user-select: none;
+}
+.cmt-main { flex: 1; min-width: 0; }
+.cmt-head { display: flex; align-items: baseline; gap: 8px; }
+.cmt-head b { color: var(--amber); font-size: 13.5px; }
+.cmt-when { font-size: 11.5px; color: var(--cream-dim); }
+.cmt-del {
+  margin-left: auto; background: none; border: 0; padding: 0;
+  font-size: 11.5px; color: var(--cream-dim);
+  opacity: 0; transition: opacity .2s, color .2s;
+}
+.cmt:hover .cmt-del, .cmt-del.armed { opacity: 1; }
+.cmt-del:hover { color: var(--amber); }
+.cmt-del.armed { color: var(--heart); }
+@media (hover: none) { .cmt-del { opacity: .75; } }
+.cmt-t { font-size: 14px; color: var(--cream); margin-top: 3px; line-height: 1.55; word-break: break-word; }
+.cmt-t .at { color: var(--amber-hot); }
+.cmt-acts { display: flex; gap: 14px; margin-top: 5px; }
+.cmt-acts button {
+  background: none; border: 0; padding: 0;
+  font-size: 12.5px; color: var(--cream-dim); transition: color .2s;
+}
+.cmt-acts button:hover { color: var(--amber); }
+.cmt-acts .cmt-like.liked { color: var(--heart); }
+.panel-num {
+  font-family: var(--font-en); font-size: 13px; letter-spacing: .1em;
+  color: var(--cream-dim); margin-left: 8px;
+}
 .c-item { padding: 9px 0; border-bottom: 1px dashed var(--line); }
 .c-item b { color: var(--amber); font-size: 13.5px; }
 .c-item .ct { font-size: 14px; color: var(--cream); margin-top: 2px; }
@@ -416,10 +449,10 @@
       </div>
 
       <div class="panel">
-        <h3><span class="ico" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0xMjgsMjRBMTA0LDEwNCwwLDAsMCwzNi4xOCwxNzYuODhMMjQuODMsMjEwLjkzYTE2LDE2LDAsMCwwLDIwLjI0LDIwLjI0bDM0LjA1LTExLjM1QTEwNCwxMDQsMCwxLDAsMTI4LDI0Wm0wLDE5MmE4Ny44Nyw4Ny44NywwLDAsMS00NC4wNi0xMS44MSw4LDgsMCwwLDAtNi41NC0uNjdMNDAsMjE2LDUyLjQ3LDE3OC42YTgsOCwwLDAsMC0uNjYtNi41NEE4OCw4OCwwLDEsMSwxMjgsMjE2WiIvPjwvc3ZnPg==')"></span>批注</h3>
+        <h3><span class="ico" style="--ico:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0xMjgsMjRBMTA0LDEwNCwwLDAsMCwzNi4xOCwxNzYuODhMMjQuODMsMjEwLjkzYTE2LDE2LDAsMCwwLDIwLjI0LDIwLjI0bDM0LjA1LTExLjM1QTEwNCwxMDQsMCwxLDAsMTI4LDI0Wm0wLDE5MmE4Ny44Nyw4Ny44NywwLDAsMS00NC4wNi0xMS44MSw4LDgsMCwwLDAtNi41NC0uNjdMNDAsMjE2LDUyLjQ3LDE3OC42YTgsOCwwLDAsMC0uNjYtNi41NEE4OCw4OCwwLDEsMSwxMjgsMjE2WiIvPjwvc3ZnPg==')"></span>评论<span class="panel-num" id="commentCount">0</span></h3>
         <div id="commentList"></div>
         <div class="c-add">
-          <input id="commentInput" placeholder="写点什么（登录后即可发布）">
+          <input id="commentInput" placeholder="说点什么（登录后即可发布）" onkeydown="if(event.key==='Enter')sendComment()">
           <button class="btn small" onclick="sendComment()">发布</button>
         </div>
       </div>

@@ -59,6 +59,7 @@ function applyFilters() {
         s, ws, n: ws.length,
         cover: getWork(s.cover) || ws[0],
         likes: ws.reduce((n, w) => n + w.likes, 0),
+        cmts: ws.reduce((n, w) => n + w.comments.length, 0),
         latest: ws.reduce((t, w) => (w.ts > t ? w.ts : t), ''),
       };
     }).filter(o =>
@@ -87,6 +88,7 @@ function applyFilters() {
           <div class="meta">
             <span>朱涵书</span>
             <span class="likes">❤ ${o.likes}</span>
+            <span class="cmts">💬 ${o.cmts}</span>
           </div>
         </div>
       </a>`).join('');
@@ -140,6 +142,7 @@ function applyFilters() {
           <span>${esc(w.author)}</span>
           <span class="tag">${esc(w.cat)}</span>
           <span class="likes">❤ ${w.likes}</span>
+          <span class="cmts">💬 ${w.comments.length}</span>
         </div>
       </div>
     </a>`).join('');

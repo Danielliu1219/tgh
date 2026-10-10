@@ -721,6 +721,164 @@ function addCat(name) {
   }
 }
 
+/* ---------- 社区评论：内置一批模拟评论 ----------
+   用作品 id 当种子确定性生成（同一幅作品每次生成的内容一样），
+   只在「没有评论 / 评论不足」时补入，用户自己发的评论一条都不会动 */
+
+const BOT_NAME = '画廊小助手';
+
+const MOCK_USERS = [
+  '野火', '盐汽水', '泡泡糖', 'Momo', '汽水盖', '团子', '阿眠', '纸鸢',
+  '蓝莓酱', '骨头', '蜜桃乌龙', '铃兰', '白鲸', '木木', '西西', '乌云',
+  '折耳', '泡芙', '眠鹿', '星尘', '汤圆', '小满', '乌冬', '皮蛋',
+];
+
+/* 评论语料：通用 + 按作品集分（说话跟作品对得上） */
+const CMT_GENERAL = [
+  '好喜欢这张！', '画得也太好了吧', '被配色戳中了', '这张我要存下来',
+  '细节好多，放大看还有惊喜', '线条好干净，慕了', '氛围感一下就出来了', '第一眼就被吸引住',
+  '这个色调也太舒服了', '构图好稳，学到了', '收藏了，慢慢看', '怎么做到每一张都这么好看的',
+  '好会画，狠狠羡慕', '这个笔触我很喜欢', '看呆了，缓一缓', '每天来转一圈都有新收获',
+];
+const CMT_BY_SET = {
+  s1: [
+    '这个纹样做成帆布包一定好看', '徽章感很强，想挂在包上', '配色像老海报，很有味道',
+    '票根那张太有收集欲了', '做成贴纸我第一个买', '排版好舒服，设计感在线',
+    'logo 的小细节好巧', '周边既视感，出必买',
+  ],
+  s2: [
+    'phantom 的设定感一下就出来了', '金属质感和光影都好绝', '这个分镜张力好足',
+    '背景的机械细节画得好认真', '隔着屏幕都能感觉到重量感', '设定集既视感，太强了',
+    '每一格都想放大看', 'phantom 粉狂喜',
+  ],
+  s3: [
+    '晚祷的氛围好安静，好喜欢', '这个光像教堂里透进来的', '看完心里静下来了',
+    '分镜的留白好有讲究', '色调好温柔又有点忧伤', '压抑感和希望感居然在同一张里',
+    '像一页诗集', '故事感好强，想看全篇',
+  ],
+  s4: [
+    '这张的构图太绝了', '色彩层次好丰富', '眼神画得好有戏', '衣褶的质感处理得好飒',
+    '大图看得出功底', '这张适合当壁纸', '光影处理像电影截图', '氛围拉满，收藏了',
+  ],
+  s5: [
+    '随手一画都这么有灵气', '线条好放得开，看着就爽', '这个涂鸦风格好有辨识度',
+    '看起来好轻松但很难学', '粗线好带感', '草稿感反而更有味道', '这张好适合做头像',
+    '涂鸦区宝藏',
+  ],
+  s6: [
+    '好可爱！想捏', 'Q 版比例拿捏得刚刚好', '这个表情管理哈哈哈', '圆乎乎的好治愈',
+    '小表情太灵了', '被可爱到了，血压下降', '想做成挂件带身上', '萌力超标',
+  ],
+  s7: [
+    '光影好干净', '这张构图好有电影感', '天空的颜色太美了', '视角好特别，是蹲了多久',
+    '安静又好看的一张', '焦外好柔，什么镜头拍的？', '像日系胶片', '按快门时机好准',
+  ],
+};
+/* 接话 / 作者回评 */
+const CMT_REPLIES = ['同感！', '我也这么觉得哈哈哈', '就是就是', '说到我心坎里了', '＋1', '对对对，尤其细节', '握手，审美一致', '这条评论我直接点赞'];
+const CMT_AUTHOR = [
+  '谢谢喜欢！', '画的时候正好在想这个，被你看出来了', '哈哈哈这张拖了好几天才画完',
+  '谢谢！下一张继续加油', '好眼力，这里改了三四遍', '谢谢支持，会继续画的', '被你一说我又想再改改了（笑）',
+];
+
+/* FNV-1a 字符串哈希（给生成器播种） */
+function hashStr(s) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return h >>> 0;
+}
+/* mulberry32：种子随机（同种子每次都一样） */
+function mockRnd(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function fmtDate(ms) {
+  const d = new Date(ms);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+const DAY_MS = 86400000;
+
+function cmtPick(arr, rnd) { return arr[Math.floor(rnd() * arr.length) % arr.length]; }
+function cmtUser(rnd, not) {
+  let u = cmtPick(MOCK_USERS, rnd);
+  for (let k = 0; k < 4 && u === not; k++) u = cmtPick(MOCK_USERS, rnd);
+  return u;
+}
+
+/* 一幅作品要几条模拟评论、都说些什么：3~6 条（螺旋上的代表作 5~8 条），
+   时间从作品发布之后散落到现在，混入少量 @接话 与作者回评 */
+function mockCommentsFor(w) {
+  const rnd = mockRnd(hashStr(w.id));
+  let n = 3 + Math.floor(rnd() * 4);
+  if (SPIRAL_IDS.indexOf(w.id) !== -1) n += 2;
+  const pool = CMT_BY_SET[w.set] || [];
+  const end = Date.now() - Math.floor(rnd() * 2) * DAY_MS;
+  const wTs = new Date(w.ts).getTime();
+  let start = Math.max(isNaN(wTs) ? end - 50 * DAY_MS : wTs + DAY_MS, end - 50 * DAY_MS);
+  if (start > end - n * DAY_MS) start = end - (n + 1) * DAY_MS;
+  const span = end - start;
+  const list = [], used = {};
+  let prevU = '';
+  for (let i = 0; i < n; i++) {
+    const r = rnd();
+    let u, t;
+    if (i > 0 && r < 0.12) {                       /* 作者回一句 */
+      u = w.author;
+      t = cmtPick(CMT_AUTHOR, rnd);
+      if (prevU !== w.author && rnd() < 0.45) t = '@' + prevU + ' ' + t;
+    } else if (i > 0 && r < 0.32) {                /* 围观用户接话 */
+      u = cmtUser(rnd, prevU);
+      t = '@' + prevU + ' ' + cmtPick(CMT_REPLIES, rnd);
+    } else {                                       /* 普通评论：本集语料 7 成、通用 3 成 */
+      u = cmtUser(rnd, prevU);
+      const p = (rnd() < 0.7 && pool.length) ? pool : CMT_GENERAL;
+      t = cmtPick(p, rnd);
+      for (let k = 0; k < 3 && used[t]; k++) t = cmtPick(p, rnd);   /* 同一幅里少重复发言 */
+    }
+    used[t] = 1;
+    prevU = u;
+    const lik = rnd();
+    list.push({
+      id: w.id + 'm' + i,
+      u, t,
+      ts: fmtDate(start + Math.round(((i + 0.3 + rnd() * 0.4) / n) * span)),
+      likes: lik < 0.3 ? 0 : 1 + Math.floor(rnd() * 18),
+      m: 1,   /* m:1 = 内置模拟评论 */
+    });
+  }
+  return list;
+}
+
+/* 幂等迁移：给存量评论补 id，再把缺的模拟评论补齐。
+   老浏览器（已有 localStorage）与全新浏览器走同一套逻辑，用户数据不受影响 */
+function seedCommunityComments(list) {
+  let changed = false;
+  list.forEach(w => {
+    if (!w.comments) { w.comments = []; changed = true; }
+    w.comments.forEach((c, i) => {
+      if (!c.id) { c.id = w.id + 'p' + i; changed = true; }
+    });
+    if (isUserWork(w)) return;   /* 自己发布的作品不织入模拟评论（发布时已有小助手欢迎语） */
+    const mock = mockCommentsFor(w);
+    const have = {};
+    let mockCount = 0;
+    w.comments.forEach(c => { have[c.id] = 1; if (c.m) mockCount++; });
+    const need = mock.length - mockCount;
+    if (need > 0) {
+      mock.filter(c => !have[c.id]).slice(0, need).forEach(c => w.comments.push(c));
+      changed = true;
+    }
+  });
+  return changed;
+}
+
 /* ---------- localStorage 读写 ---------- */
 
 const K = {
@@ -730,6 +888,7 @@ const K = {
   likes: 'tgh_likes_' + DATA_VER,
   collage: 'tgh_collage_' + DATA_VER,
   cats: 'tgh_cats_' + DATA_VER,   /* 自定义分类，resetData 一并清 */
+  cmlikes: 'tgh_cmlikes_' + DATA_VER,   /* 点过赞的评论 id */
 };
 
 function read(key, fallback) {
@@ -749,9 +908,13 @@ function getWorks() {
     worksCache = read(K.works, null);
     if (!worksCache || !Array.isArray(worksCache) || worksCache.length === 0) {
       worksCache = JSON.parse(JSON.stringify(SEED_WORKS)); // 深拷贝种子
+      seedCommunityComments(worksCache);
       write(K.works, worksCache);
-    } else if (dropOldSampleLayer(worksCache)) {
-      write(K.works, worksCache);
+    } else {
+      /* 老浏览器已经存过数据：旧示例图层清一清、社区评论补一补（各自幂等） */
+      const a = dropOldSampleLayer(worksCache);
+      const b = seedCommunityComments(worksCache);
+      if (a || b) write(K.works, worksCache);
     }
   }
   return worksCache;
@@ -882,11 +1045,29 @@ function dropLayerLike(layerId) {
 }
 function layerLikeCount(w, l) { return l.likes + (isLayerLiked(l.id) ? 1 : 0); }
 
-/* 批注 */
+/* ---------- 评论 ---------- */
 function addComment(workId, text, u) {
   const w = getWork(workId);
-  w.comments.push({ u, t: text, ts: today() });
+  if (!w) return null;
+  const c = { id: w.id + 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), u, t: text, ts: today() };
+  w.comments.push(c);
   saveWorks();
+  return c;
+}
+/* 只能删自己发的评论（内置模拟评论、别人的评论不给删） */
+function canRemoveComment(c) {
+  const u = getUser();
+  return !!(u && c && c.u === u.name);
+}
+function removeComment(workId, commentId) {
+  const w = getWork(workId);
+  if (!w) return false;
+  const i = w.comments.findIndex(c => c.id === commentId);
+  if (i === -1 || !canRemoveComment(w.comments[i])) return false;
+  w.comments.splice(i, 1);
+  saveWorks();
+  dropCommentLike(commentId);
+  return true;
 }
 function addLayerComment(workId, layerId, text, u) {
   const w = getWork(workId);
@@ -894,13 +1075,27 @@ function addLayerComment(workId, layerId, text, u) {
   if (l) { l.comments.push({ u, t: text, ts: today() }); saveWorks(); }
 }
 
-/* 发帖 */
+/* 评论点赞（存本机，与图层点赞同一套路） */
+function toggleCommentLike(id) {
+  const map = read(K.cmlikes, {});
+  map[id] = map[id] ? 0 : 1;
+  write(K.cmlikes, map);
+  return map[id] === 1;
+}
+function isCommentLiked(id) { return !!read(K.cmlikes, {})[id]; }
+function dropCommentLike(id) {
+  const map = read(K.cmlikes, {});
+  if (id in map) { delete map[id]; write(K.cmlikes, map); }
+}
+function commentLikeCount(c) { return (c.likes || 0) + (isCommentLiked(c.id) ? 1 : 0); }
+
+/* 发帖：新作品上墙时，画廊小助手来留一句欢迎 */
 function addWork(work) {
   work.id = 'u' + Date.now();
   work.ts = today();
   work.likes = 0;
   work.layers = [];
-  work.comments = [];
+  work.comments = [{ id: work.id + 'p0', u: BOT_NAME, t: '欢迎上墙！期待有人来添第一笔～', ts: today() }];
   getWorks().unshift(work);
   saveWorks();
   return work;
@@ -921,6 +1116,7 @@ function removeWork(id) {
     saveCollage(col);
   }
   (w.layers || []).forEach(l => dropLayerLike(l.id));
+  (w.comments || []).forEach(c => { if (c.id) dropCommentLike(c.id); });
   return true;
 }
 

@@ -46,6 +46,7 @@ if (!set) {
         <div class="meta">
           <span>${esc(w.author)}</span>
           <span class="likes">❤ ${w.likes}</span>
+          <span class="cmts">💬 ${w.comments.length}</span>
         </div>
       </div>
     </a>`).join('');
